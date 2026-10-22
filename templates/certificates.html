@@ -1,0 +1,88 @@
+
+{% extends "base.html" %}
+{% from "macros.html" import empty_state, toast %}
+
+{% block title %}Certificates · SkillMatch{% endblock %}
+
+{% block content %}
+  <section aria-labelledby="certificates-title">
+    {% if role == "Organizer" %}
+      <header class="section-heading">
+        <p class="eyebrow">Organizer workspace</p>
+        <h1 id="certificates-title">Complete events</h1>
+        <p>Record final volunteer hours and notes to issue event certificates.</p>
+      </header>
+    {% else %}
+      <header class="section-heading">
+        <p class="eyebrow">Volunteer workspace</p>
+        <h1 id="certificates-title">Your certificates</h1>
+        <p>Download your certificates or share a verification code.</p>
+      </header>
+    {% endif %}
+
+    {% if error %}{{ toast(error, "error") }}{% endif %}
+    {% if notice %}{{ toast(notice) }}{% endif %}
+
+    {% if role == "Organizer" %}
+      {% if events %}
+        <div class="team-grid">
+          {% for item in events %}
+            <article class="team-card">
+              <p class="eyebrow">Event · {{ item.event_id }}</p>
+              <h2>{{ item.event.name }}</h2>
+              {% if item.event.status == "completed" %}
+                <p role="status">This event is complete. Certificates have been issued to accepted volunteers.</p>
+              {% else %}
+                <form method="post"
+                      action="{{ url_for('certificates.complete_event', event_id=item.event_id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  {% for volunteer in item.volunteers %}
+                    <fieldset>
+                      <legend>{{ volunteer.name }} · {{ volunteer.username }}</legend>
+                      <p>
+                        <label for="hours-{{ loop.index }}-{{ item.event_id }}">Final hours</label><br>
+                        <input id="hours-{{ loop.index }}-{{ item.event_id }}"
+                               name="hours_{{ volunteer.username }}" type="number"
+                               min="0" step="1" value="{{ volunteer.hours }}" required>
+                      </p>
+                      <p>
+                        <label for="notes-{{ loop.index }}-{{ item.event_id }}">Contribution notes</label><br>
+                        <textarea id="notes-{{ loop.index }}-{{ item.event_id }}"
+                                  name="notes_{{ volunteer.username }}" maxlength="1000"
+                                  rows="3">{{ volunteer.notes }}</textarea>
+                      </p>
+                    </fieldset>
+                  {% endfor %}
+                  <button class="button button--primary" type="submit">Mark event complete</button>
+                </form>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        {{ empty_state("You don’t have any events to complete yet.", "View events", url_for("dashboard.home")) }}
+      {% endif %}
+    {% else %}
+      {% if certificates %}
+        <div class="team-grid">
+          {% for certificate in certificates %}
+            <article class="team-card">
+              <p class="eyebrow">Certificate · {{ certificate.verification_code }}</p>
+              <h2>{{ certificate.event_name }}</h2>
+              <p>{{ certificate.hours }} volunteer hours</p>
+              {% if certificate.notes %}<p>{{ certificate.notes }}</p>{% endif %}
+              <p><strong>Verification code:</strong> {{ certificate.verification_code }}</p>
+              <a class="button button--primary"
+                 href="{{ url_for('certificates.download', verification_code=certificate.verification_code) }}">
+                Download certificate
+              </a>
+              <p><a href="{{ url_for('certificates.verify') }}">Verify this certificate</a></p>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        {{ empty_state("You don’t have any certificates yet.", "Discover events", url_for("events.discover")) }}
+      {% endif %}
+    {% endif %}
+  </section>
+{% endblock %}
