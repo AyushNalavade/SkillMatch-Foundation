@@ -1,10 +1,13 @@
 """Organizer dashboard and volunteer-review operations backed by JSON storage."""
 
 from collections.abc import Mapping
-from datetime import date, datetime
+import math
+from datetime import date, datetime, time as time_value, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from data_store import load, save
+from event_service import EVENTS_FILE as EVENT_RECORDS_FILE, create_event, validate_event_data
 
 
 EVENTS_FILE = "events.json"
@@ -125,6 +128,164 @@ def get_organizer_events(organizer_id: str) -> list[dict[str, Any]]:
             else "",
         ),
     )
+
+
+def _event_form_payload(organizer_id: str, form: Mapping[str, Any]) -> dict[str, Any]:
+    """Parse and validate the organizer form into the shared event data shape."""
+    organizer_id = _required_text(organizer_id, "organizer_id")
+
+    def text_field(name: str, label: str, limit: int) -> str:
+        value = form.get(name)
+        value = _required_text(value, label)
+        if len(value) > limit:
+            raise ValueError(f"'{label}' must be {limit} characters or fewer.")
+        return value
+
+    skills_text = form.get("required_skills")
+    if not isinstance(skills_text, str) or not skills_text.strip():
+        raise ValueError("Add at least one required skill and rating.")
+    required_skills: dict[str, int] = {}
+    for line_number, line in enumerate(skills_text.splitlines(), start=1):
+        line = line.strip()
+        if not line:
+            continue
+        skill, separator, rating_text = line.rpartition(":")
+        skill = skill.strip()
+        rating_text = rating_text.strip()
+        if not separator or not skill or not rating_text.isdigit():
+            raise ValueError(
+                f"Required skill line {line_number} must use the format 'Skill: rating'."
+            )
+        required_skills[skill] = int(rating_text)
+    if not required_skills:
+        raise ValueError("Add at least one required skill and rating.")
+
+    date_text = form.get("date")
+    if not isinstance(date_text, str):
+        raise ValueError("'date' must be a valid date.")
+    try:
+        event_date = date.fromisoformat(date_text.strip())
+    except ValueError as error:
+        raise ValueError("'date' must be a valid date.") from error
+
+    start_time_text = form.get("start_time", "09:00")
+    if not isinstance(start_time_text, str):
+        raise ValueError("'start_time' must be a valid time.")
+    try:
+        start_time = time_value.fromisoformat(start_time_text.strip())
+    except ValueError as error:
+        raise ValueError("'start_time' must be a valid time.") from error
+    if start_time.tzinfo is not None:
+        raise ValueError("'start_time' must not include a timezone.")
+
+    duration_text = form.get("duration")
+    try:
+        duration_hours = float(duration_text)
+    except (TypeError, ValueError) as error:
+        raise ValueError("'duration' must be a number of hours.") from error
+    if not math.isfinite(duration_hours) or not 0 < duration_hours <= 72:
+        raise ValueError("'duration' must be more than 0 and no more than 72 hours.")
+
+    seats_text = form.get("seats")
+    if not isinstance(seats_text, str) or not seats_text.strip().isdigit():
+        raise ValueError("'seats' must be a positive whole number.")
+    seats = int(seats_text.strip())
+    if not 0 < seats <= 10000:
+        raise ValueError("'seats' must be between 1 and 10000.")
+
+    starts_at = datetime.combine(
+        event_date, start_time, tzinfo=ZoneInfo("Asia/Kolkata")
+    )
+    ends_at = starts_at + timedelta(hours=duration_hours)
+    return {
+        "name": text_field("title", "title", 120),
+        "description": text_field("description", "description", 3000),
+        "organizer": organizer_id,
+        "required_skills": required_skills,
+        "slots_needed": seats,
+        "department": text_field("department", "department", 100),
+        "type": text_field("event_type", "event type", 100),
+        "location": text_field("venue", "venue", 160),
+        "date": event_date.isoformat(),
+        "starts_at": starts_at.isoformat(),
+        "ends_at": ends_at.isoformat(),
+        "duration_hours": duration_hours,
+    }
+
+
+def organizer_event_form_values(event: Mapping[str, Any] | None = None) -> dict[str, str]:
+    """Build form values from an existing event, or return create-form defaults."""
+    if not isinstance(event, Mapping):
+        return {"start_time": "09:00", "duration": "1"}
+    start_value = event.get("starts_at")
+    starts_at = None
+    if isinstance(start_value, str):
+        try:
+            starts_at = datetime.fromisoformat(start_value.replace("Z", "+00:00"))
+            if starts_at.tzinfo is None:
+                starts_at = starts_at.replace(tzinfo=timezone.utc)
+            starts_at = starts_at.astimezone(ZoneInfo("Asia/Kolkata"))
+        except ValueError:
+            starts_at = None
+    event_date = event.get("date")
+    if not isinstance(event_date, str) and starts_at is not None:
+        event_date = starts_at.date().isoformat()
+    duration = event.get("duration_hours")
+    if not isinstance(duration, (int, float)) and starts_at is not None:
+        ends_value = event.get("ends_at")
+        if isinstance(ends_value, str):
+            try:
+                ends_at = datetime.fromisoformat(ends_value.replace("Z", "+00:00"))
+                duration = (ends_at - starts_at).total_seconds() / 3600
+            except ValueError:
+                duration = 1
+    if not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0:
+        duration = 1
+    skills = event.get("required_skills", {})
+    skill_lines = (
+        "\n".join(f"{skill}: {rating}" for skill, rating in skills.items())
+        if isinstance(skills, Mapping)
+        else ""
+    )
+    return {
+        "title": str(event.get("name", "")),
+        "description": str(event.get("description", "")),
+        "required_skills": skill_lines,
+        "department": str(event.get("department", event.get("dept", ""))),
+        "event_type": str(event.get("type", event.get("event_type", ""))),
+        "date": event_date if isinstance(event_date, str) else "",
+        "start_time": starts_at.strftime("%H:%M") if starts_at else "09:00",
+        "venue": str(event.get("location", event.get("venue", ""))),
+        "duration": str(duration),
+        "seats": str(event.get("slots_needed", "")),
+    }
+
+
+def create_organizer_event(organizer_id: str, form: Mapping[str, Any]) -> str:
+    """Validate and create an event owned by the signed-in organizer."""
+    return create_event(_event_form_payload(organizer_id, form))
+
+
+def get_organizer_event(organizer_id: str, event_id: str) -> dict[str, Any]:
+    """Return an event only when it belongs to the requested organizer."""
+    event, _events, _applications = _load_owned_event(organizer_id, event_id)
+    return event
+
+
+def update_organizer_event(
+    organizer_id: str, event_id: str, form: Mapping[str, Any]
+) -> None:
+    """Update an owned event while preserving its ID, status, and creation time."""
+    event, events, _event_applications = _load_owned_event(organizer_id, event_id)
+    payload = validate_event_data(_event_form_payload(organizer_id, form))
+    payload["status"] = event.get("status", "open")
+    if payload["status"] not in ("open", "completed"):
+        raise ValueError(f"Event '{event_id}' has an invalid status.")
+    payload["created_at"] = event.get("created_at")
+    updated_event = dict(event)
+    updated_event.update(payload)
+    events[event_id] = updated_event
+    save(EVENT_RECORDS_FILE, events)
 
 
 def get_event_applicants(organizer_id: str, event_id: str) -> dict[str, Any]:
