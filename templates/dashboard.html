@@ -133,7 +133,11 @@
           {% endfor %}
         </div>
       {% else %}
-        <p>You haven’t posted any events yet.</p>
+        {{ empty_state(
+          "You haven’t posted any events yet. Create one to start finding volunteers.",
+          "Create your first event",
+          url_for("dashboard.new_event")
+        ) }}
       {% endif %}
     </section>
   {% endif %}
