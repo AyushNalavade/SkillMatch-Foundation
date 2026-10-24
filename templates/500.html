@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Something went wrong · SkillMatch{% endblock %}
+
+{% block content %}
+  <section class="not-found-panel" aria-labelledby="server-error-title">
+    <p class="eyebrow">500 · Server error</p>
+    <h1 id="server-error-title">We hit a snag.</h1>
+    <p>Something went wrong on our side. Please try again in a moment. If the problem continues, come back later.</p>
+    <a class="button button--primary" href="{{ url_for('home') }}">Back to SkillMatch</a>
+  </section>
+{% endblock %}
