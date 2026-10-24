@@ -46,6 +46,12 @@ def page_not_found(_error):
     return render_template("404.html"), 404
 
 
+@app.errorhandler(500)
+def internal_server_error(_error):
+    """Show a friendly page without exposing internal exception details."""
+    return render_template("500.html"), 500
+
+
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
