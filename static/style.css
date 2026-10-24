@@ -414,6 +414,67 @@ a:hover {
   font-size: 1.8rem;
 }
 
+.event-loading {
+  display: none;
+  margin-top: 1.5rem;
+}
+
+#discover-filters.htmx-request + .event-loading {
+  display: block;
+}
+
+#discover-filters.htmx-request ~ #event-results {
+  opacity: 0.55;
+}
+
+.event-loading-label {
+  margin: 0 0 0.75rem;
+  color: var(--ink-soft);
+}
+
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.skeleton-line {
+  display: block;
+  width: 100%;
+  height: 0.8rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e7ece8 25%, #f5f7f4 50%, #e7ece8 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-line--short {
+  width: 34%;
+  height: 0.65rem;
+}
+
+.skeleton-line--heading {
+  width: 70%;
+  height: 1.35rem;
+}
+
+.skeleton-line--medium {
+  width: 76%;
+}
+
+.skeleton-line--button {
+  width: 7rem;
+  height: 2.6rem;
+  margin-top: 0.25rem;
+  border-radius: 0.7rem;
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
 .toast {
   display: flex;
   align-items: center;
