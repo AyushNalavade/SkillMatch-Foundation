@@ -43,7 +43,7 @@
                         <label for="hours-{{ loop.index }}-{{ item.event_id }}">Final hours</label><br>
                         <input id="hours-{{ loop.index }}-{{ item.event_id }}"
                                name="hours_{{ volunteer.username }}" type="number"
-                               min="0" step="1" value="{{ volunteer.hours }}" required>
+                               min="0" step="any" value="{{ volunteer.hours|format_decimal }}" required>
                       </p>
                       <p>
                         <label for="notes-{{ loop.index }}-{{ item.event_id }}">Contribution notes</label><br>
@@ -69,7 +69,7 @@
             <article class="team-card">
               <p class="eyebrow">Certificate · {{ certificate.verification_code }}</p>
               <h2>{{ certificate.event_name }}</h2>
-              <p>{{ certificate.hours }} volunteer hours</p>
+              <p>{{ certificate.hours|format_decimal }} volunteer hours</p>
               {% if certificate.notes %}<p>{{ certificate.notes }}</p>{% endif %}
               <p><strong>Verification code:</strong> {{ certificate.verification_code }}</p>
               <a class="button button--primary"
