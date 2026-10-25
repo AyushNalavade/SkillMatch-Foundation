@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
 import math
+from pathlib import Path
 import re
 import secrets
 import string
@@ -60,6 +61,51 @@ def _format_certificate_date(value: Any) -> str | None:
     if parsed is None:
         return None
     return parsed.strftime("%B %d, %Y").replace(" 0", " ")
+
+
+def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
+    """Read width and height from a JPEG frame header."""
+    if not data.startswith(b"\xff\xd8"):
+        raise ValueError("The campus dome asset is not a JPEG image.")
+    frame_markers = {
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+        0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
+    }
+    offset = 2
+    while offset + 4 <= len(data):
+        if data[offset] != 0xFF:
+            offset += 1
+            continue
+        while offset < len(data) and data[offset] == 0xFF:
+            offset += 1
+        if offset >= len(data):
+            break
+        marker = data[offset]
+        offset += 1
+        if marker in (0xD8, 0xD9, 0x01) or 0xD0 <= marker <= 0xD7:
+            continue
+        if offset + 2 > len(data):
+            break
+        segment_length = int.from_bytes(data[offset:offset + 2], "big")
+        if segment_length < 2 or offset + segment_length > len(data):
+            break
+        if marker in frame_markers:
+            if segment_length < 7:
+                break
+            height = int.from_bytes(data[offset + 3:offset + 5], "big")
+            width = int.from_bytes(data[offset + 5:offset + 7], "big")
+            if width > 0 and height > 0:
+                return width, height
+            break
+        offset += segment_length
+    raise ValueError("Could not read the campus dome image dimensions.")
+
+
+def _read_dome_image() -> tuple[bytes, int, int]:
+    image_path = Path(__file__).resolve().parent / "static" / "images" / "mitwpu-dome.jpeg"
+    image_data = image_path.read_bytes()
+    width, height = _jpeg_dimensions(image_data)
+    return image_data, width, height
 
 
 def _event_date_value(event: Mapping[str, Any]) -> str | None:
@@ -178,7 +224,6 @@ def _render_certificate_pdf(
     volunteer_name: str,
     event_name: str,
     hours: int | float,
-    verification_code: str,
     event_date: str | None = None,
     issue_date: str | None = None,
 ) -> bytes:
@@ -188,6 +233,13 @@ def _render_certificate_pdf(
     gold = (0.78, 0.58, 0.23)
     ink = (0.12, 0.16, 0.20)
     muted_ink = (0.34, 0.38, 0.40)
+    dome_jpeg, dome_width, dome_height = _read_dome_image()
+    image_box_width, image_box_height = 210.0, 140.0
+    image_scale = min(image_box_width / dome_width, image_box_height / dome_height)
+    image_width = dome_width * image_scale
+    image_height = dome_height * image_scale
+    image_x = 542 + (image_box_width - image_width) / 2
+    image_y = 409 + (image_box_height - image_height) / 2
     commands = [
         "q",
         f"{dark_green[0]:.3f} {dark_green[1]:.3f} {dark_green[2]:.3f} RG "
@@ -199,18 +251,26 @@ def _render_certificate_pdf(
         f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} rg "
         "389 512 m 396 519 l 403 512 l 396 505 l h f",
         "Q",
+        f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} RG "
+        f"1.3 w {image_x - 3:.2f} {image_y - 3:.2f} "
+        f"{image_width + 6:.2f} {image_height + 6:.2f} re S",
+        f"q {image_width:.2f} 0 0 {image_height:.2f} "
+        f"{image_x:.2f} {image_y:.2f} cm /Dome Do Q",
     ]
     commands.append(_pdf_text_command(
-        "CERTIFICATE OF PARTICIPATION", 396, 542, 22, "F2", dark_green, centered=True,
+        "CERTIFICATE OF PARTICIPATION", 300, 545, 19, "F2", dark_green, centered=True,
     ))
     commands.append(_pdf_text_command(
-        "PRESENTED TO", 396, 490, 10, "F2", muted_green, centered=True,
+        "MIT WORLD PEACE UNIVERSITY | PUNE", 300, 519, 9, "F2", muted_green, centered=True,
+    ))
+    commands.append(_pdf_text_command(
+        "PRESENTED TO", 396, 413, 10, "F2", muted_green, centered=True,
     ))
 
     name_lines, name_size = _fit_pdf_text(
         volunteer_name, 670, preferred_size=34, minimum_size=22, max_lines=3, bold=True,
     )
-    name_y = 462
+    name_y = 380
     for line in name_lines:
         commands.append(_pdf_text_command(line, 396, name_y, name_size, "F2", ink, centered=True))
         name_y -= name_size + 3
@@ -241,11 +301,11 @@ def _render_certificate_pdf(
         396, details_y - 49, 16, "F2", dark_green, centered=True,
     ))
     commands.append(_pdf_text_command(
-        f"Verification code: {verification_code}",
-        396, details_y - 88, 11, "F2", ink, centered=True,
+        "Verification code available in your SkillMatch profile",
+        396, details_y - 88, 10, "F2", ink, centered=True,
     ))
     commands.append(_pdf_text_command(
-        "Verify this certificate at /verify",
+        "Verify at /verify",
         396, details_y - 108, 10, "F1", muted_ink, centered=True,
     ))
     commands.extend([
@@ -256,15 +316,28 @@ def _render_certificate_pdf(
         ),
     ])
     stream = "\n".join(commands).encode("cp1252", errors="replace")
+    image_object = (
+        b"<< /Type /XObject /Subtype /Image /Width "
+        + str(dome_width).encode("ascii")
+        + b" /Height "
+        + str(dome_height).encode("ascii")
+        + b" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
+        + str(len(dome_jpeg)).encode("ascii")
+        + b" >>\nstream\n"
+        + dome_jpeg
+        + b"\nendstream"
+    )
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources "
-        b"<< /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
+        b"<< /Font << /F1 4 0 R /F2 5 0 R >> "
+        b"/XObject << /Dome 7 0 R >> >> /Contents 6 0 R >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
         b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n"
         + stream + b"\nendstream",
+        image_object,
     ]
     pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     offsets = [0]
@@ -312,7 +385,6 @@ def render_certificate_pdf(record: Mapping[str, Any]) -> bytes | None:
         str(volunteer_name),
         str(event_name),
         hours,
-        code,
         event_date=record.get("event_date"),
         issue_date=record.get("generated_at"),
     )
