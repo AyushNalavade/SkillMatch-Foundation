@@ -7,7 +7,7 @@
   <section class="not-found-panel" aria-labelledby="register-title">
     <p class="eyebrow">Join your campus community</p>
     <h1 id="register-title">Create a SkillMatch account</h1>
-    <p>Set up your profile so campus events can find the skills you offer.</p>
+    <p>Create an account to volunteer for campus events or organize your own.</p>
 
     <div id="auth-message" aria-live="polite">
       {% for category, message in get_flashed_messages(with_categories=true) %}
@@ -36,7 +36,12 @@
       <p>
         <label for="role">I’m joining as</label><br>
         {% set selected_role = form_data.get('role', 'Student Volunteer') %}
-        <select id="role" name="role" required>
+        <select id="role" name="role" required
+                hx-get="{{ url_for('auth.registration_profile_fields') }}"
+                hx-trigger="change"
+                hx-target="#registration-profile-fields"
+                hx-swap="outerHTML"
+                hx-include="#registration-profile-fields">
           <option value="Student Volunteer" {% if selected_role == "Student Volunteer" %}selected{% endif %}>
             Student Volunteer
           </option>
@@ -45,18 +50,8 @@
           </option>
         </select>
       </p>
-      <p>
-        <label for="dept">Department</label><br>
-        <input id="dept" name="dept" type="text" value="{{ form_data.get('dept', '') }}"
-               autocomplete="organization" maxlength="100">
-        <br><small>Required for student volunteers; organizers can add it later.</small>
-      </p>
-      <p>
-        <label for="skills">Skills and ratings</label><br>
-        <textarea id="skills" name="skills" rows="3"
-                  placeholder="Photography:4, Event planning:3">{{ form_data.get('skills', '') }}</textarea>
-        <br><small>Optional. Separate entries with commas; ratings are whole numbers starting at 0.</small>
-      </p>
+      {% set selected_role = form_data.get('role', 'Student Volunteer') %}
+      {% include "registration_fields.html" %}
       <p>
         <label for="password">Password</label><br>
         <input id="password" name="password" type="password"
