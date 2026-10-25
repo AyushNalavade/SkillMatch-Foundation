@@ -50,6 +50,15 @@ class MobileUiTests(unittest.TestCase):
         self.assertIn('event.key !== "Tab"', script)
         self.assertIn("modalOpener.focus()", script)
 
+    def test_homepage_image_respects_its_intrinsic_dimensions(self):
+        html = self.client.get("/").get_data(as_text=True)
+        css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+        self.assertIn('width="775"', html)
+        self.assertIn('height="517"', html)
+        self.assertIn("width: min(100%, 775px)", css)
+        self.assertIn("height: auto", css)
+        self.assertIn("object-fit: contain", css)
+
 
 if __name__ == "__main__":
     unittest.main()

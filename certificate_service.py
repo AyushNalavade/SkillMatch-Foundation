@@ -2,12 +2,14 @@
 
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
+import math
 import re
 import secrets
 import string
 from typing import Any
 
 from data_store import load, save
+from formatting import format_decimal
 
 
 EVENTS_FILE = "events.json"
@@ -175,7 +177,7 @@ def _pdf_text_command(
 def _render_certificate_pdf(
     volunteer_name: str,
     event_name: str,
-    hours: int,
+    hours: int | float,
     verification_code: str,
     event_date: str | None = None,
     issue_date: str | None = None,
@@ -235,7 +237,8 @@ def _render_certificate_pdf(
         f"Issue date: {issue_date_text}", 396, details_y - 19, 11, "F1", muted_ink, centered=True,
     ))
     commands.append(_pdf_text_command(
-        f"{hours} volunteer hours", 396, details_y - 49, 16, "F2", dark_green, centered=True,
+        f"{format_decimal(hours)} volunteer hours",
+        396, details_y - 49, 16, "F2", dark_green, centered=True,
     ))
     commands.append(_pdf_text_command(
         f"Verification code: {verification_code}",
@@ -291,7 +294,12 @@ def render_certificate_pdf(record: Mapping[str, Any]) -> bytes | None:
         return None
 
     hours = record.get("hours", 0)
-    if not isinstance(hours, int) or isinstance(hours, bool) or hours < 0:
+    if (
+        not isinstance(hours, (int, float))
+        or isinstance(hours, bool)
+        or not math.isfinite(hours)
+        or hours < 0
+    ):
         hours = 0
     volunteer_name = record.get("volunteer_name")
     if not isinstance(volunteer_name, str) or not volunteer_name.strip():
@@ -441,16 +449,26 @@ def complete_event(
         if set(contribution_updates) != set(accepted):
             return False, "Enter final hours and notes for every accepted volunteer."
 
-        cleaned_updates: dict[str, tuple[int, str]] = {}
+        cleaned_updates: dict[str, tuple[int | float, str]] = {}
         for username in accepted:
             update = contribution_updates.get(username)
             if not isinstance(update, Mapping):
                 return False, f"Contribution details for '{username}' are invalid."
             hours = update.get("hours")
-            if isinstance(hours, str) and hours.strip().isdigit():
-                hours = int(hours.strip())
-            if not isinstance(hours, int) or isinstance(hours, bool) or hours < 0:
-                return False, f"Hours for '{username}' must be a non-negative whole number."
+            if isinstance(hours, str):
+                try:
+                    hours = float(hours.strip())
+                except ValueError:
+                    hours = None
+            if (
+                not isinstance(hours, (int, float))
+                or isinstance(hours, bool)
+                or not math.isfinite(hours)
+                or hours < 0
+            ):
+                return False, f"Hours for '{username}' must be a non-negative finite number."
+            if float(hours).is_integer():
+                hours = int(hours)
             notes = update.get("notes", "")
             if not isinstance(notes, str) or len(notes) > 1000:
                 return False, f"Notes for '{username}' must be 1,000 characters or fewer."
@@ -562,7 +580,12 @@ def verify_certificate(verification_code: str) -> dict[str, Any] | None:
         event_date = _format_certificate_date(_event_date_value(event))
 
     hours = record.get("hours")
-    if not isinstance(hours, int) or isinstance(hours, bool) or hours < 0:
+    if (
+        not isinstance(hours, (int, float))
+        or isinstance(hours, bool)
+        or not math.isfinite(hours)
+        or hours < 0
+    ):
         hours = None
     event_name = record.get("event_name")
     if not isinstance(event_name, str) and isinstance(event, Mapping):
