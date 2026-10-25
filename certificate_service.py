@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
 import math
+from pathlib import Path
 import re
 import secrets
 import string
@@ -10,6 +11,7 @@ from typing import Any
 
 from data_store import load, save
 from formatting import format_decimal
+from notification_service import add_notifications
 
 
 EVENTS_FILE = "events.json"
@@ -60,6 +62,51 @@ def _format_certificate_date(value: Any) -> str | None:
     if parsed is None:
         return None
     return parsed.strftime("%B %d, %Y").replace(" 0", " ")
+
+
+def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
+    """Read width and height from a JPEG frame header."""
+    if not data.startswith(b"\xff\xd8"):
+        raise ValueError("The campus dome asset is not a JPEG image.")
+    frame_markers = {
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+        0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
+    }
+    offset = 2
+    while offset + 4 <= len(data):
+        if data[offset] != 0xFF:
+            offset += 1
+            continue
+        while offset < len(data) and data[offset] == 0xFF:
+            offset += 1
+        if offset >= len(data):
+            break
+        marker = data[offset]
+        offset += 1
+        if marker in (0xD8, 0xD9, 0x01) or 0xD0 <= marker <= 0xD7:
+            continue
+        if offset + 2 > len(data):
+            break
+        segment_length = int.from_bytes(data[offset:offset + 2], "big")
+        if segment_length < 2 or offset + segment_length > len(data):
+            break
+        if marker in frame_markers:
+            if segment_length < 7:
+                break
+            height = int.from_bytes(data[offset + 3:offset + 5], "big")
+            width = int.from_bytes(data[offset + 5:offset + 7], "big")
+            if width > 0 and height > 0:
+                return width, height
+            break
+        offset += segment_length
+    raise ValueError("Could not read the campus dome image dimensions.")
+
+
+def _read_dome_image() -> tuple[bytes, int, int]:
+    image_path = Path(__file__).resolve().parent / "static" / "images" / "mitwpu-dome.jpeg"
+    image_data = image_path.read_bytes()
+    width, height = _jpeg_dimensions(image_data)
+    return image_data, width, height
 
 
 def _event_date_value(event: Mapping[str, Any]) -> str | None:
@@ -165,7 +212,7 @@ def _pdf_text_command(
 ) -> str:
     normalized = " ".join(str(text).split())
     if centered:
-        x -= _estimated_text_width(normalized, font_size, font == "F2") / 2
+        x -= _estimated_text_width(normalized, font_size, font in ("F2", "F4")) / 2
     red, green, blue = color
     return (
         f"{red:.3f} {green:.3f} {blue:.3f} rg "
@@ -178,93 +225,149 @@ def _render_certificate_pdf(
     volunteer_name: str,
     event_name: str,
     hours: int | float,
-    verification_code: str,
     event_date: str | None = None,
     issue_date: str | None = None,
 ) -> bytes:
-    """Render a designed, single-page landscape certificate without local file storage."""
+    """Render a single-page landscape certificate with a split photo-and-type layout."""
     dark_green = (0.08, 0.31, 0.25)
     muted_green = (0.20, 0.43, 0.36)
     gold = (0.78, 0.58, 0.23)
+    paper = (0.976, 0.965, 0.929)
     ink = (0.12, 0.16, 0.20)
     muted_ink = (0.34, 0.38, 0.40)
+    dome_jpeg, dome_width, dome_height = _read_dome_image()
+    image_scale = 558 / dome_height
+    image_width = dome_width * image_scale
+    image_height = dome_height * image_scale
+    image_x = 27 - 315 * image_scale
+    image_y = 27
     commands = [
+        f"{paper[0]:.3f} {paper[1]:.3f} {paper[2]:.3f} rg 0 0 792 612 re f",
         "q",
-        f"{dark_green[0]:.3f} {dark_green[1]:.3f} {dark_green[2]:.3f} RG "
-        "2.2 w 22 22 748 568 re S",
         f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} RG "
-        "0.8 w 32 32 728 548 re S",
-        f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} RG "
-        "1.2 w 124 516 m 350 516 l S 442 516 m 668 516 l S",
-        f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} rg "
-        "389 512 m 396 519 l 403 512 l 396 505 l h f",
+        "0.9 w 18 18 756 576 re S 25 25 742 562 re S",
         "Q",
+        "q 27 27 m 27 585 l 350 585 l "
+        "369 548 380 495 381 430 c "
+        "383 352 380 280 371 210 c "
+        "361 140 347 75 337 27 c 27 27 l h W n",
+        f"q {image_width:.2f} 0 0 {image_height:.2f} "
+        f"{image_x:.2f} {image_y:.2f} cm /Dome Do Q",
+        "Q",
+        f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} RG "
+        "1.5 w 27 585 m 350 585 l "
+        "369 548 380 495 381 430 c "
+        "383 352 380 280 371 210 c "
+        "361 140 347 75 337 27 c 27 27 l S",
+        f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} RG "
+        "0.55 w 346 582 m 365 545 375 490 377 427 c "
+        "379 352 376 280 367 210 c "
+        "358 140 344 75 333 30 c S",
+        f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} rg "
+        "576 532 m 581 537 l 586 532 l 581 527 l h f",
+        f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} RG 0.9 w "
+        "448 534 m 510 534 l S 652 534 m 714 534 l S",
+        f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} RG 0.75 w "
+        "366 29 m 380 55 390 100 414 151 c S "
+        "371 47 m 362 45 357 49 354 55 c 362 59 369 56 371 47 c S "
+        "378 64 m 388 57 396 58 400 63 c 394 70 386 70 378 64 c S "
+        "382 81 m 372 77 365 81 363 87 c 371 92 378 89 382 81 c S "
+        "388 98 m 398 90 407 91 411 96 c 404 103 396 104 388 98 c S "
+        "394 116 m 384 112 377 116 375 122 c 383 127 390 124 394 116 c S "
+        "401 134 m 411 126 419 128 422 133 c 415 140 407 140 401 134 c S",
     ]
-    commands.append(_pdf_text_command(
-        "CERTIFICATE OF PARTICIPATION", 396, 542, 22, "F2", dark_green, centered=True,
-    ))
-    commands.append(_pdf_text_command(
-        "PRESENTED TO", 396, 490, 10, "F2", muted_green, centered=True,
+    commands.extend((
+        _pdf_text_command(
+            "MIT WORLD PEACE UNIVERSITY", 581, 566, 10, "F2", dark_green, centered=True,
+        ),
+        _pdf_text_command("PUNE", 581, 551, 7, "F2", muted_green, centered=True),
+        _pdf_text_command(
+            "CERTIFICATE OF", 581, 501, 20, "F3", dark_green, centered=True,
+        ),
+        _pdf_text_command(
+            "PARTICIPATION", 581, 472, 29, "F4", dark_green, centered=True,
+        ),
+        _pdf_text_command(
+            "PRESENTED TO", 581, 438, 8, "F2", muted_green, centered=True,
+        ),
     ))
 
+    text_center = 581
+    text_width = 346
     name_lines, name_size = _fit_pdf_text(
-        volunteer_name, 670, preferred_size=34, minimum_size=22, max_lines=3, bold=True,
+        volunteer_name, text_width, preferred_size=25, minimum_size=17, max_lines=2, bold=True,
     )
-    name_y = 462
+    name_y = 411
     for line in name_lines:
-        commands.append(_pdf_text_command(line, 396, name_y, name_size, "F2", ink, centered=True))
+        commands.append(_pdf_text_command(line, text_center, name_y, name_size, "F4", dark_green, centered=True))
         name_y -= name_size + 3
 
-    event_label_y = name_y - 10
+    event_label_y = 411 - len(name_lines) * (name_size + 3) - 6
     commands.append(_pdf_text_command(
-        "FOR PARTICIPATION IN", 396, event_label_y, 10, "F2", muted_green, centered=True,
+        "FOR PARTICIPATION IN", text_center, event_label_y, 8, "F2", muted_green, centered=True,
     ))
     event_lines, event_size = _fit_pdf_text(
-        event_name, 670, preferred_size=20, minimum_size=13, max_lines=3, bold=True,
+        event_name, text_width, preferred_size=18, minimum_size=13, max_lines=2, bold=True,
     )
-    event_y = event_label_y - 28
+    event_y = event_label_y - 24
     for line in event_lines:
-        commands.append(_pdf_text_command(line, 396, event_y, event_size, "F2", ink, centered=True))
-        event_y -= event_size + 2
+        commands.append(_pdf_text_command(
+            line, text_center, event_y, event_size, "F4", dark_green, centered=True,
+        ))
+        event_y -= event_size + 3
 
-    details_y = event_y - 7
+    details_y = event_label_y - 24 - len(event_lines) * (event_size + 3) - 10
     event_date_text = _format_certificate_date(event_date) or "Not recorded"
     issue_date_text = _format_certificate_date(issue_date) or "Not recorded"
     commands.append(_pdf_text_command(
-        f"Event date: {event_date_text}", 396, details_y, 11, "F1", muted_ink, centered=True,
+        f"Event date: {event_date_text}", text_center, details_y, 9, "F1", muted_ink, centered=True,
     ))
     commands.append(_pdf_text_command(
-        f"Issue date: {issue_date_text}", 396, details_y - 19, 11, "F1", muted_ink, centered=True,
+        f"Issue date: {issue_date_text}", text_center, details_y - 16, 9, "F1", muted_ink, centered=True,
     ))
     commands.append(_pdf_text_command(
         f"{format_decimal(hours)} volunteer hours",
-        396, details_y - 49, 16, "F2", dark_green, centered=True,
+        text_center, details_y - 45, 14, "F2", dark_green, centered=True,
     ))
     commands.append(_pdf_text_command(
-        f"Verification code: {verification_code}",
-        396, details_y - 88, 11, "F2", ink, centered=True,
+        "Verification code available in your SkillMatch profile",
+        text_center, details_y - 76, 8, "F2", ink, centered=True,
     ))
     commands.append(_pdf_text_command(
-        "Verify this certificate at /verify",
-        396, details_y - 108, 10, "F1", muted_ink, centered=True,
+        "Verify at /verify", text_center, details_y - 94, 8, "F1", muted_ink, centered=True,
     ))
     commands.extend([
         f"{gold[0]:.3f} {gold[1]:.3f} {gold[2]:.3f} RG "
-        "1 w 301 87 m 491 87 l S",
+        "0.9 w 507 82 m 655 82 l S",
         _pdf_text_command(
-            "Event Organizer Signature", 396, 69, 9, "F1", muted_ink, centered=True,
+            "Event Organizer Signature", text_center, 65, 8, "F1", muted_ink, centered=True,
         ),
     ])
     stream = "\n".join(commands).encode("cp1252", errors="replace")
+    image_object = (
+        b"<< /Type /XObject /Subtype /Image /Width "
+        + str(dome_width).encode("ascii")
+        + b" /Height "
+        + str(dome_height).encode("ascii")
+        + b" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
+        + str(len(dome_jpeg)).encode("ascii")
+        + b" >>\nstream\n"
+        + dome_jpeg
+        + b"\nendstream"
+    )
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources "
-        b"<< /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
+        b"<< /Font << /F1 4 0 R /F2 5 0 R /F3 7 0 R /F4 8 0 R >> "
+        b"/XObject << /Dome 9 0 R >> >> /Contents 6 0 R >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
         b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n"
         + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold /Encoding /WinAnsiEncoding >>",
+        image_object,
     ]
     pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     offsets = [0]
@@ -312,7 +415,6 @@ def render_certificate_pdf(record: Mapping[str, Any]) -> bytes | None:
         str(volunteer_name),
         str(event_name),
         hours,
-        code,
         event_date=record.get("event_date"),
         issue_date=record.get("generated_at"),
     )
@@ -445,6 +547,15 @@ def complete_event(
             event["completed_at"] = datetime.now(timezone.utc).isoformat()
             events[event_id] = event
             save(EVENTS_FILE, events)
+            organizer_id = event.get("organizer")
+            if isinstance(organizer_id, str) and organizer_id.strip():
+                add_notifications(
+                    [organizer_id],
+                    kind="event_ended",
+                    title="Event ended",
+                    message=f"{event.get('name', 'Your event')} has been marked complete.",
+                    event_id=event_id,
+                )
             return True, "Event completed. There were no accepted volunteers to certify."
         if set(contribution_updates) != set(accepted):
             return False, "Enter final hours and notes for every accepted volunteer."
@@ -483,6 +594,22 @@ def complete_event(
         events[event_id] = event
         save(APPLICATIONS_FILE, applications)
         save(EVENTS_FILE, events)
+        organizer_id = event.get("organizer")
+        if isinstance(organizer_id, str) and organizer_id.strip():
+            add_notifications(
+                [organizer_id],
+                kind="event_ended",
+                title="Event ended",
+                message=f"{event.get('name', 'Your event')} has been marked complete.",
+                event_id=event_id,
+            )
+        add_notifications(
+            list(accepted),
+            kind="event_ended",
+            title="Event ended",
+            message=f"{event.get('name', 'The event')} has ended. Thank you for volunteering.",
+            event_id=event_id,
+        )
 
         for username in accepted:
             success, result = generate_certificate(event_id, username)
