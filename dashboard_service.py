@@ -7,8 +7,14 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from data_store import load, save
-from event_service import EVENTS_FILE as EVENT_RECORDS_FILE, create_event, validate_event_data
+from event_service import (
+    EVENTS_FILE as EVENT_RECORDS_FILE,
+    create_event,
+    get_event_eligibility_reason,
+    validate_event_data,
+)
 from formatting import format_decimal
+from notification_service import add_notifications
 
 
 EVENTS_FILE = "events.json"
@@ -264,7 +270,35 @@ def organizer_event_form_values(event: Mapping[str, Any] | None = None) -> dict[
 
 def create_organizer_event(organizer_id: str, form: Mapping[str, Any]) -> str:
     """Validate and create an event owned by the signed-in organizer."""
-    return create_event(_event_form_payload(organizer_id, form))
+    payload = _event_form_payload(organizer_id, form)
+    users = load(USERS_FILE)
+    if not isinstance(users, dict):
+        raise ValueError("users.json must contain an object keyed by username.")
+    event_id = create_event(payload)
+    event_name = payload["name"]
+    add_notifications(
+        [organizer_id],
+        kind="event_posted",
+        title="Event posted",
+        message=f"Your event, {event_name}, is now open for applications.",
+        event_id=event_id,
+    )
+    volunteer_ids = [
+        username
+        for username, user in users.items()
+        if isinstance(username, str)
+        and isinstance(user, Mapping)
+        and user.get("role") == "Student Volunteer"
+    ]
+    if volunteer_ids:
+        add_notifications(
+            volunteer_ids,
+            kind="event_posted",
+            title="New event posted",
+            message=f"{event_name} is open. Review the event details and apply if interested.",
+            event_id=event_id,
+        )
+    return event_id
 
 
 def get_organizer_event(organizer_id: str, event_id: str) -> dict[str, Any]:
@@ -277,7 +311,7 @@ def update_organizer_event(
     organizer_id: str, event_id: str, form: Mapping[str, Any]
 ) -> None:
     """Update an owned event while preserving its ID, status, and creation time."""
-    event, events, _event_applications = _load_owned_event(organizer_id, event_id)
+    event, events, event_applications = _load_owned_event(organizer_id, event_id)
     payload = validate_event_data(_event_form_payload(organizer_id, form))
     payload["status"] = event.get("status", "open")
     if payload["status"] not in ("open", "completed"):
@@ -285,8 +319,32 @@ def update_organizer_event(
     payload["created_at"] = event.get("created_at")
     updated_event = dict(event)
     updated_event.update(payload)
+    details_fields = (
+        "name", "description", "required_skills", "slots_needed", "department",
+        "type", "location", "date", "starts_at", "ends_at", "duration_hours",
+    )
+    details_changed = any(
+        event.get(field) != updated_event.get(field) for field in details_fields
+    )
     events[event_id] = updated_event
     save(EVENT_RECORDS_FILE, events)
+    if details_changed:
+        recipients = [organizer_id]
+        recipients.extend(
+            applicant_id
+            for applicant_id in event_applications
+            if isinstance(applicant_id, str)
+        )
+        add_notifications(
+            recipients,
+            kind="event_details_updated",
+            title="Event details updated",
+            message=(
+                f"The details for {updated_event['name']} changed. "
+                "Open the event to see the latest schedule, venue, and requirements."
+            ),
+            event_id=event_id,
+        )
 
 
 def get_event_applicants(organizer_id: str, event_id: str) -> dict[str, Any]:
@@ -405,6 +463,23 @@ def update_application_status(
     event_applications[volunteer_id] = application
     applications[event_id] = event_applications
     save(APPLICATIONS_FILE, applications)
+    if current_status != new_status:
+        event_name = event.get("name", "the event")
+        if new_status == "accepted":
+            title = "Application accepted"
+            message = f"Your application for {event_name} was accepted. Your assigned role is {role}."
+            kind = "application_accepted"
+        else:
+            title = "Application rejected"
+            message = f"Your application for {event_name} was not accepted."
+            kind = "application_rejected"
+        add_notifications(
+            [volunteer_id],
+            kind=kind,
+            title=title,
+            message=message,
+            event_id=event_id,
+        )
 
 
 def mark_attendance(
