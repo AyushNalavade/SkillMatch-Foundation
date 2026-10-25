@@ -24,6 +24,7 @@ from flask import (
 from auth_service import login_user, register_user
 from certificate_service import get_user_certificates
 from data_store import load, save
+from notification_service import get_unread_notification_count
 
 
 USERS_FILE = "users.json"
@@ -83,9 +84,19 @@ def _inject_auth_context():
     if not token:
         token = secrets.token_urlsafe(32)
         session["csrf_token"] = token
+    current_user = getattr(g, "current_user", None)
+    notification_unread_count = 0
+    if (
+        isinstance(current_user, dict)
+        and current_user.get("role") in {"Organizer", "Student Volunteer"}
+    ):
+        notification_unread_count = get_unread_notification_count(
+            current_user["username"]
+        )
     return {
-        "current_user": getattr(g, "current_user", None),
+        "current_user": current_user,
         "csrf_token": token,
+        "notification_unread_count": notification_unread_count,
     }
 
 
