@@ -54,14 +54,20 @@ def register_user(
         return False, "Enter a name of 1 to 100 characters."
     if role not in ALLOWED_ROLES:
         return False, "Choose Organizer or Student Volunteer."
-    if role == "Student Volunteer" and not dept:
-        return False, "Enter your department."
     if not isinstance(password, str) or not 8 <= len(password) <= 1024:
         return False, "Use a password between 8 and 1024 characters."
 
-    cleaned_skills = _validated_skills(skills)
-    if cleaned_skills is None:
-        return False, "Enter skills as names with non-negative whole-number ratings."
+    if role == "Organizer":
+        dept = ""
+        cleaned_skills = {}
+    else:
+        if not dept:
+            return False, "Enter your department."
+        cleaned_skills = _validated_skills(skills)
+        if cleaned_skills is None:
+            return False, "Enter skills as names with non-negative whole-number ratings."
+        if not cleaned_skills:
+            return False, "Add at least one skill to your volunteer profile."
 
     users = load(USERS_FILE)
     if not isinstance(users, dict):
