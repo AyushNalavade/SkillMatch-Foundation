@@ -27,6 +27,19 @@ class MobileUiTests(unittest.TestCase):
             source = (ROOT / "templates" / template).read_text(encoding="utf-8")
             self.assertIsNone(re.search(r"\sstyle\s*=", source), template)
 
+    def test_desktop_navigation_is_outside_the_closed_mobile_menu(self):
+        html = self.client.get("/").get_data(as_text=True)
+        navigation = html.split('<nav class="primary-nav"', 1)[1].split("</nav>", 1)[0]
+        desktop, mobile = navigation.split('<details class="nav-menu">', 1)
+        self.assertIn('class="top-nav top-nav--desktop"', desktop)
+        for label in ("Home", "Discover events", "Verify certificate", "Sign in"):
+            self.assertIn(f">{label}</a>", desktop)
+            self.assertIn(f">{label}</a>", mobile)
+        css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
+        desktop_css, mobile_css = css.split("@media (max-width: 760px)", 1)
+        self.assertRegex(desktop_css, r"\.nav-menu\s*\{\s*display:\s*none;")
+        self.assertRegex(mobile_css, r"\.nav-menu\s*\{\s*display:\s*block;")
+
     def test_mobile_layout_and_modal_keyboard_support_are_present(self):
         css = (ROOT / "static" / "style.css").read_text(encoding="utf-8")
         script = (ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8")
