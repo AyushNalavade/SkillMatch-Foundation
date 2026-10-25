@@ -7,7 +7,7 @@
     <header class="section-heading">
       <p class="eyebrow">Public certificate check</p>
       <h1 id="verify-title">Verify a certificate</h1>
-      <p>Enter the code printed on the certificate to confirm it is genuine.</p>
+      <p>Enter the verification code shared by the certificate holder to confirm it is genuine.</p>
     </header>
 
     <form method="post" action="{{ url_for('certificates.verify') }}">
@@ -38,7 +38,7 @@
             <p><strong>Issue date:</strong> {{ certificate.issue_date }}</p>
           {% endif %}
           {% if certificate.hours is not none %}
-            <p><strong>Hours:</strong> {{ certificate.hours }}</p>
+            <p><strong>Hours:</strong> {{ certificate.hours|format_decimal }}</p>
           {% endif %}
           <p><strong>Verification code:</strong> {{ certificate.verification_code }}</p>
         </section>
