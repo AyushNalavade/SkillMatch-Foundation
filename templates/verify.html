@@ -38,7 +38,7 @@
             <p><strong>Issue date:</strong> {{ certificate.issue_date }}</p>
           {% endif %}
           {% if certificate.hours is not none %}
-            <p><strong>Hours:</strong> {{ certificate.hours }}</p>
+            <p><strong>Hours:</strong> {{ certificate.hours|format_decimal }}</p>
           {% endif %}
           <p><strong>Verification code:</strong> {{ certificate.verification_code }}</p>
         </section>
