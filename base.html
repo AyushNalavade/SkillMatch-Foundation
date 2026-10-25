@@ -23,13 +23,7 @@
         <span>SkillMatch</span>
       </a>
       <p class="site-tagline">Campus service, matched by skill.</p>
-      <nav class="primary-nav" aria-label="Primary navigation">
-        <details class="nav-menu">
-          <summary class="nav-menu-toggle">
-            <span class="nav-menu-icon" aria-hidden="true"><span></span></span>
-            <span>Menu</span>
-          </summary>
-          <div class="top-nav">
+      {% macro navigation_links() %}
             <a href="{{ url_for('home') }}">Home</a>
             <a href="{{ url_for('events.discover') }}">Discover events</a>
             <a href="{{ url_for('certificates.verify') }}">Verify certificate</a>
@@ -44,6 +38,19 @@
             {% else %}
               <a href="{{ url_for('auth.login') }}">Sign in</a>
             {% endif %}
+      {% endmacro %}
+      <nav class="primary-nav" aria-label="Primary navigation">
+        {# Closed details hide their contents even when child CSS says display:flex. #}
+        <div class="top-nav top-nav--desktop">
+          {{ navigation_links() }}
+        </div>
+        <details class="nav-menu">
+          <summary class="nav-menu-toggle">
+            <span class="nav-menu-icon" aria-hidden="true"><span></span></span>
+            <span>Menu</span>
+          </summary>
+          <div class="top-nav">
+            {{ navigation_links() }}
           </div>
         </details>
       </nav>
