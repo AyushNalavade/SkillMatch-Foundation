@@ -1,0 +1,18 @@
+<div id="registration-profile-fields">
+  {% if selected_role == "Organizer" %}
+    <p><small>Organizers don’t need to provide a department or skills.</small></p>
+  {% else %}
+    <p>
+      <label for="dept">Department</label><br>
+      <input id="dept" name="dept" type="text"
+             value="{{ form_data.get('dept', '') }}"
+             autocomplete="organization" maxlength="100" required>
+    </p>
+    <p>
+      <label for="skills">Skills and ratings</label><br>
+      <textarea id="skills" name="skills" rows="3" required
+                placeholder="Photography:4, Event planning:3">{{ form_data.get('skills', '') }}</textarea>
+      <br><small>Required for student volunteers. Separate entries with commas; ratings are whole numbers starting at 0.</small>
+    </p>
+  {% endif %}
+</div>
