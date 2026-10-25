@@ -2,7 +2,6 @@
 
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
-from pathlib import Path
 import re
 import secrets
 import string
@@ -15,7 +14,6 @@ EVENTS_FILE = "events.json"
 APPLICATIONS_FILE = "applications.json"
 USERS_FILE = "users.json"
 CERTIFICATES_FILE = "certificates.json"
-CERTIFICATE_DIR = Path(__file__).resolve().parent / "data" / "certificates"
 
 
 def _load_object(filename: str, description: str) -> dict[str, Any]:
@@ -76,14 +74,6 @@ def _normalize_verification_code(value: Any) -> str | None:
         return None
     normalized = value.strip().upper()
     return normalized if re.fullmatch(r"[A-Z0-9]{10}", normalized) else None
-
-
-def get_certificate_pdf_path(verification_code: str) -> Path | None:
-    """Return a certificate path only for a code matching the existing safe format."""
-    normalized = _normalize_verification_code(verification_code)
-    if normalized is None:
-        return None
-    return CERTIFICATE_DIR / f"{normalized}.pdf"
 
 
 def _estimated_text_width(text: str, font_size: int, bold: bool = False) -> float:
@@ -182,16 +172,15 @@ def _pdf_text_command(
     )
 
 
-def _write_certificate_pdf(
-    file_path: Path,
+def _render_certificate_pdf(
     volunteer_name: str,
     event_name: str,
     hours: int,
     verification_code: str,
     event_date: str | None = None,
     issue_date: str | None = None,
-) -> None:
-    """Write a designed, single-page landscape certificate PDF without extra libraries."""
+) -> bytes:
+    """Render a designed, single-page landscape certificate without local file storage."""
     dark_green = (0.08, 0.31, 0.25)
     muted_green = (0.20, 0.43, 0.36)
     gold = (0.78, 0.58, 0.23)
@@ -290,8 +279,35 @@ def _write_certificate_pdf(
         f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\n"
         f"startxref\n{xref_offset}\n%%EOF\n".encode("ascii")
     )
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_bytes(pdf)
+    return bytes(pdf)
+
+
+def render_certificate_pdf(record: Mapping[str, Any]) -> bytes | None:
+    """Render a persisted certificate record as PDF bytes for an on-demand download."""
+    if not isinstance(record, Mapping):
+        return None
+    code = _normalize_verification_code(record.get("verification_code"))
+    if code is None or record.get("verification_code") != code:
+        return None
+
+    hours = record.get("hours", 0)
+    if not isinstance(hours, int) or isinstance(hours, bool) or hours < 0:
+        hours = 0
+    volunteer_name = record.get("volunteer_name")
+    if not isinstance(volunteer_name, str) or not volunteer_name.strip():
+        volunteer_name = record.get("username", "Student Volunteer")
+    event_name = record.get("event_name")
+    if not isinstance(event_name, str) or not event_name.strip():
+        event_name = record.get("event_id", "Campus event")
+
+    return _render_certificate_pdf(
+        str(volunteer_name),
+        str(event_name),
+        hours,
+        code,
+        event_date=record.get("event_date"),
+        issue_date=record.get("generated_at"),
+    )
 
 
 def _certificate_for(event_id: str, username: str) -> dict[str, Any] | None:
@@ -362,7 +378,6 @@ def generate_certificate(
                 "hours": application.get("hours", 0),
                 "notes": application.get("notes", ""),
                 "generated_at": datetime.now(timezone.utc).isoformat(),
-                "filename": f"{code}.pdf",
             }
 
         code = record.get("verification_code")
@@ -373,25 +388,12 @@ def generate_certificate(
             "volunteer_name": user.get("name", username),
             "hours": application.get("hours", 0),
             "notes": application.get("notes", ""),
-            "filename": f"{code}.pdf",
         })
         if event_date is not None:
             record["event_date"] = event_date
-        file_path = get_certificate_pdf_path(code)
-        if file_path is None:
-            return False, "The stored certificate has an invalid verification code."
-        _write_certificate_pdf(
-            file_path,
-            str(record["volunteer_name"]),
-            str(record["event_name"]),
-            record["hours"],
-            code,
-            event_date=record.get("event_date"),
-            issue_date=record.get("generated_at"),
-        )
         certificates[code] = record
         save(CERTIFICATES_FILE, certificates)
-        return True, str(file_path)
+        return True, code
     except Exception as error:
         return False, f"Could not generate the certificate: {error}"
 
@@ -559,7 +561,6 @@ def verify_certificate(verification_code: str) -> dict[str, Any] | None:
     if event_date is None and isinstance(event, Mapping):
         event_date = _format_certificate_date(_event_date_value(event))
 
-    file_path = get_certificate_pdf_path(code)
     hours = record.get("hours")
     if not isinstance(hours, int) or isinstance(hours, bool) or hours < 0:
         hours = None
@@ -578,5 +579,5 @@ def verify_certificate(verification_code: str) -> dict[str, Any] | None:
         "event_date": event_date,
         "issue_date": _format_certificate_date(record.get("generated_at")),
         "hours": hours,
-        "pdf_available": bool(file_path and file_path.is_file()),
+        "pdf_available": True,
     }

@@ -1,6 +1,7 @@
 """Certificate pages, organizer event completion, and public verification."""
 
 from functools import wraps
+from io import BytesIO
 
 from flask import Blueprint, abort, g, render_template, request, send_file, url_for
 
@@ -8,9 +9,9 @@ from auth_routes import _login_required, _require_csrf
 from certificate_service import (
     complete_event as complete_event_service,
     get_certificate_for_user,
-    get_certificate_pdf_path,
     get_organizer_events,
     get_user_certificates,
+    render_certificate_pdf,
     verify_certificate,
 )
 
@@ -108,11 +109,11 @@ def download(verification_code):
     record = get_certificate_for_user(verification_code, g.current_user["username"])
     if record is None:
         abort(404)
-    file_path = get_certificate_pdf_path(record["verification_code"])
-    if file_path is None or not file_path.is_file():
+    pdf_bytes = render_certificate_pdf(record)
+    if pdf_bytes is None:
         abort(404)
     return send_file(
-        file_path,
+        BytesIO(pdf_bytes),
         mimetype="application/pdf",
         as_attachment=True,
         download_name=f"SkillMatch-{record['verification_code']}.pdf",
