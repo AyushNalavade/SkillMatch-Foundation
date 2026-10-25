@@ -134,12 +134,16 @@ class CertificateGenerationTests(unittest.TestCase):
             b"Event date: October 6, 2025",
             f"Issue date: {issue_date}".encode(),
             b"3 volunteer hours",
-            f"Verification code: {record['verification_code']}".encode(),
-            b"Verify this certificate at /verify",
+            b"Verification code available in your SkillMatch profile",
+            b"Verify at /verify",
             b"Event Organizer Signature",
+            b"/Subtype /Image",
+            b"/Filter /DCTDecode",
+            b"/Dome Do",
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, pdf)
+        self.assertNotIn(record["verification_code"].encode(), pdf)
 
     def test_decimal_contribution_hours_are_saved_verified_and_included_in_pdf(self):
         self.sign_in("organizer")
@@ -196,7 +200,7 @@ class CertificateGenerationTests(unittest.TestCase):
         ))
 
         pdf = certificate_service._render_certificate_pdf(
-            long_name, long_event, 4, "ABCDE12345", "2025-10-06", "2025-10-07",
+            long_name, long_event, 4, "2025-10-06", "2025-10-07",
         )
         self.assertIn(b"Amelia Alexandria Johnson", pdf)
         self.assertIn(b"Community Food and Supply Drive", pdf)
@@ -216,6 +220,26 @@ class CertificateGenerationTests(unittest.TestCase):
         self.assertIn(b"Issue date:", response.data)
         self.assertIn(b"Hours:</strong> 4", response.data)
         self.assertIn(record["verification_code"].encode(), response.data)
+
+    def test_profile_shows_private_certificate_notification_and_prefilled_verification(self):
+        record, _pdf = self.issue_directly()
+        code = record["verification_code"]
+
+        self.sign_in("volunteer")
+        profile = self.client.get("/profile")
+        self.assertEqual(profile.status_code, 200)
+        self.assertIn(b"Certificate notifications", profile.data)
+        self.assertIn(b"has been issued", profile.data)
+        self.assertIn(code.encode(), profile.data)
+        self.assertIn(f'href="/verify?code={code}"'.encode(), profile.data)
+
+        verify = self.client.get(f"/verify?code={code.lower()}")
+        self.assertEqual(verify.status_code, 200)
+        self.assertIn(b"Certificate verified and PDF available", verify.data)
+
+        self.sign_in("other_volunteer")
+        other_profile = self.client.get("/profile")
+        self.assertNotIn(code.encode(), other_profile.data)
 
     def test_empty_malformed_and_unknown_codes_are_not_found(self):
         for code in ("", "bad-code", "123456789", "UNKNOWN1234", "ZZZZZZZZZZ"):
