@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "macros.html" import empty_state %}
+
+{% block title %}Volunteer contributions · SkillMatch{% endblock %}
+
+{% block content %}
+  <section class="contributions-page" aria-labelledby="contributions-title">
+    <p class="eyebrow">Organizer workspace · {{ event_id }}</p>
+    <h1 id="contributions-title">{{ event.name }} contributions</h1>
+    <p>Volunteer hours and attendance for this event.</p>
+
+    {% if summary.applicants_count == 0 %}
+      {{ empty_state(
+        "There are no applicants to show for this event yet.",
+        "Back to organizer dashboard",
+        url_for("dashboard.home")
+      ) }}
+    {% else %}
+      <div class="contribution-chart-grid">
+        <section class="contribution-chart-panel" aria-labelledby="contribution-chart-title">
+          <h2 id="contribution-chart-title">Contribution by volunteer</h2>
+          {% if summary.volunteers %}
+            <img class="contribution-chart"
+                 src="{{ url_for('dashboard.contribution_chart', event_id=event_id) }}"
+                 alt="Horizontal bar chart of {{ summary.accepted_count }} accepted volunteers, sorted from highest to lowest by {{ summary.contribution_metric|lower }}.">
+          {% else %}
+            {{ empty_state(
+              "No accepted volunteers have contributions to chart yet.",
+              "Review applicants",
+              url_for("dashboard.applicants", event_id=event_id)
+            ) }}
+          {% endif %}
+        </section>
+
+        <section class="contribution-chart-panel" aria-labelledby="attendance-chart-title">
+          <h2 id="attendance-chart-title">Attendance and applicants</h2>
+          {% if summary.has_attendance_data %}
+            {% if not summary.has_attendance_records %}
+              {{ empty_state(
+                "No attendance has been recorded yet. The chart shows pending applicants.",
+                "Review applicants",
+                url_for("dashboard.applicants", event_id=event_id)
+              ) }}
+            {% endif %}
+            <img class="contribution-chart"
+                 src="{{ url_for('dashboard.attendance_chart', event_id=event_id) }}"
+                 alt="Donut chart showing {{ summary.attendance_counts.attended }} attended, {{ summary.attendance_counts.not_attended }} not attended, and {{ summary.attendance_counts.pending }} pending applicants.">
+          {% else %}
+            {{ empty_state(
+              "Attendance data will appear when attendance is recorded or the event is completed.",
+              "Back to organizer dashboard",
+              url_for("dashboard.home")
+            ) }}
+          {% endif %}
+        </section>
+      </div>
+    {% endif %}
+
+    <p class="contributions-back">
+      <a class="button button--secondary" href="{{ url_for('dashboard.home') }}">Back to dashboard</a>
+    </p>
+  </section>
+{% endblock %}
