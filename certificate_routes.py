@@ -126,10 +126,10 @@ def verify():
     code = (
         request.form.get("verification_code", "").strip().upper()
         if request.method == "POST"
-        else ""
+        else request.args.get("code", "").strip().upper()
     )
     result = verify_certificate(code) if code else None
-    searched = request.method == "POST"
+    searched = request.method == "POST" or bool(code)
     return render_template(
         "verify.html",
         verification_code=code,
