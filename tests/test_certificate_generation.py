@@ -16,11 +16,7 @@ class CertificateGenerationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="skillmatch-certificates-")
         self.root = Path(self.temp.name)
         self.data_patch = patch.object(data_store, "DATA_DIR", self.root / "data")
-        self.pdf_patch = patch.object(
-            certificate_service, "CERTIFICATE_DIR", self.root / "data" / "certificates"
-        )
         self.data_patch.start()
-        self.pdf_patch.start()
         self.old_config = {
             key: app.config[key] for key in ("TESTING", "SESSION_COOKIE_SECURE")
         }
@@ -79,7 +75,6 @@ class CertificateGenerationTests(unittest.TestCase):
 
     def tearDown(self):
         app.config.update(self.old_config)
-        self.pdf_patch.stop()
         self.data_patch.stop()
         self.temp.cleanup()
 
@@ -101,7 +96,7 @@ class CertificateGenerationTests(unittest.TestCase):
         self.assertTrue(success, path)
         certificates = data_store.load("certificates.json")
         record = next(iter(certificates.values()))
-        return record, Path(path)
+        return record, certificate_service.render_certificate_pdf(record)
 
     def test_organizer_completion_issues_one_page_landscape_pdf_with_dates(self):
         self.sign_in("organizer")
@@ -124,14 +119,14 @@ class CertificateGenerationTests(unittest.TestCase):
 
         record = next(iter(data_store.load("certificates.json").values()))
         self.assertEqual(record["event_date"], "2025-10-06")
-        pdf_path = self.root / "data" / "certificates" / f"{record['verification_code']}.pdf"
-        pdf = pdf_path.read_bytes()
+        pdf = certificate_service.render_certificate_pdf(record)
         issue_date = datetime.fromisoformat(record["generated_at"]).strftime("%B %d, %Y")
         issue_date = issue_date.replace(" 0", " ")
 
         self.assertTrue(pdf.startswith(b"%PDF-1.4"))
         self.assertIn(b"/MediaBox [0 0 792 612]", pdf)
         self.assertIn(b"/Count 1", pdf)
+        self.assertFalse((self.root / "data" / "certificates").exists())
         for expected in (
             b"CERTIFICATE OF PARTICIPATION",
             b"Amelia Johnson",
@@ -145,6 +140,38 @@ class CertificateGenerationTests(unittest.TestCase):
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, pdf)
+
+    def test_decimal_contribution_hours_are_saved_verified_and_included_in_pdf(self):
+        self.sign_in("organizer")
+        response = self.client.post(
+            "/certificates/events/e1/complete",
+            data={
+                "csrf_token": "test-csrf",
+                "hours_volunteer": "1.5",
+                "notes_volunteer": "Supported setup",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        application = data_store.load("applications.json")["e1"]["volunteer"]
+        self.assertEqual(application["hours"], 1.5)
+        record = next(iter(data_store.load("certificates.json").values()))
+        self.assertEqual(certificate_service.verify_certificate(
+            record["verification_code"]
+        )["hours"], 1.5)
+        self.assertIn(b"1.5 volunteer hours", certificate_service.render_certificate_pdf(record))
+
+    def test_invalid_decimal_contribution_hours_are_rejected(self):
+        for invalid in ("NaN", "inf", "-0.5", "not-a-number"):
+            with self.subTest(hours=invalid):
+                success, message = certificate_service.complete_event(
+                    "e1",
+                    {"volunteer": {"hours": invalid, "notes": ""}},
+                )
+                self.assertFalse(success)
+                self.assertIn("non-negative finite number", message)
+                self.assertEqual(
+                    data_store.load("events.json")["e1"]["status"], "open"
+                )
 
     def test_long_names_and_event_titles_fit_without_overflow(self):
         long_name = "Amelia Alexandria Johnson " * 5
@@ -168,18 +195,16 @@ class CertificateGenerationTests(unittest.TestCase):
             for line in event_lines
         ))
 
-        pdf_path = self.root / "long-certificate.pdf"
-        certificate_service._write_certificate_pdf(
-            pdf_path, long_name, long_event, 4, "ABCDE12345", "2025-10-06", "2025-10-07",
+        pdf = certificate_service._render_certificate_pdf(
+            long_name, long_event, 4, "ABCDE12345", "2025-10-06", "2025-10-07",
         )
-        pdf = pdf_path.read_bytes()
         self.assertIn(b"Amelia Alexandria Johnson", pdf)
         self.assertIn(b"Community Food and Supply Drive", pdf)
         self.assertIn(b"/MediaBox [0 0 792 612]", pdf)
         self.assertIn(b"/Count 1", pdf)
 
     def test_public_verification_normalizes_code_and_shows_dates(self):
-        record, _pdf_path = self.issue_directly()
+        record, _pdf_bytes = self.issue_directly()
         response = self.client.post(
             "/verify", data={"verification_code": record["verification_code"].lower()}
         )
@@ -199,7 +224,7 @@ class CertificateGenerationTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(b"Certificate not found or invalid.", response.data)
 
-    def test_record_without_pdf_is_not_reported_as_verified(self):
+    def test_record_without_stored_pdf_remains_verified_and_downloadable(self):
         code = "MISS1NGPDF"
         data_store.save(
             "certificates.json",
@@ -217,12 +242,19 @@ class CertificateGenerationTests(unittest.TestCase):
         )
         response = self.client.post("/verify", data={"verification_code": code})
         self.assertEqual(response.status_code, 200)
-        self.assertIn(
-            b"Certificate record found, but the PDF file is unavailable.", response.data
-        )
-        self.assertNotIn(b"Certificate verified and PDF available", response.data)
+        self.assertIn(b"Certificate verified and PDF available", response.data)
+        self.assertNotIn(b"PDF file is unavailable", response.data)
         self.assertNotIn(b"username", response.data)
         self.assertNotIn(str(self.root).encode(), response.data)
+
+        self.sign_in("volunteer")
+        download = self.client.get(f"/certificates/{code}/download")
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(download.mimetype, "application/pdf")
+        self.assertIn(f"filename=SkillMatch-{code}.pdf", download.headers["Content-Disposition"])
+        self.assertTrue(download.data.startswith(b"%PDF-1.4"))
+        self.assertFalse((self.root / "data" / "certificates").exists())
+        download.close()
 
     def test_legacy_or_invalid_dates_do_not_break_verification(self):
         code = "LEGACY1234"
@@ -239,10 +271,6 @@ class CertificateGenerationTests(unittest.TestCase):
                 }
             },
         )
-        pdf_path = self.root / "data" / "certificates" / f"{code}.pdf"
-        pdf_path.parent.mkdir(parents=True, exist_ok=True)
-        pdf_path.write_bytes(b"%PDF-1.4 legacy")
-
         certificate = certificate_service.verify_certificate(code)
         self.assertEqual(certificate["event_date"], "October 6, 2025")
         self.assertIsNone(certificate["issue_date"])
@@ -288,10 +316,11 @@ class CertificateGenerationTests(unittest.TestCase):
 
         success, path = certificate_service.generate_certificate("e1", "volunteer")
         self.assertTrue(success, path)
+        self.assertEqual(path, code)
         updated = data_store.load("certificates.json")[code]
         self.assertEqual(updated["event_date"], "2025-10-06")
         self.assertNotIn("generated_at", updated)
-        pdf = Path(path).read_bytes()
+        pdf = certificate_service.render_certificate_pdf(updated)
         self.assertIn(b"Event date: October 6, 2025", pdf)
         self.assertIn(b"Issue date: Not recorded", pdf)
 
@@ -308,18 +337,23 @@ class CertificateGenerationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         record = next(iter(data_store.load("certificates.json").values()))
         self.assertIsNone(record["event_date"])
-        pdf = (self.root / "data" / "certificates" / f"{record['verification_code']}.pdf").read_bytes()
+        pdf = certificate_service.render_certificate_pdf(record)
         self.assertIn(b"Event date: Not recorded", pdf)
 
     def test_download_requires_volunteer_role_and_certificate_ownership(self):
-        record, pdf_path = self.issue_directly()
+        record, pdf = self.issue_directly()
         endpoint = f"/certificates/{record['verification_code']}/download"
 
         self.sign_in("volunteer")
         owner_response = self.client.get(endpoint)
         self.assertEqual(owner_response.status_code, 200)
         self.assertEqual(owner_response.mimetype, "application/pdf")
-        self.assertEqual(owner_response.data, pdf_path.read_bytes())
+        self.assertIn(
+            f"filename=SkillMatch-{record['verification_code']}.pdf",
+            owner_response.headers["Content-Disposition"],
+        )
+        self.assertEqual(owner_response.data, pdf)
+        self.assertFalse((self.root / "data" / "certificates").exists())
         owner_response.close()
 
         self.sign_in("other_volunteer")
