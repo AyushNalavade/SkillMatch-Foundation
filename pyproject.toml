@@ -5,4 +5,7 @@ description = "A campus event and volunteer-matching foundation."
 requires-python = ">=3.13"
 dependencies = [
     "flask>=3.1.3",
+    "matplotlib>=3.11.2",
+    "psycopg[binary]>=3.3.6",
+    "werkzeug>=3.1.9",
 ]
