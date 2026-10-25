@@ -97,6 +97,62 @@ class EventTests(unittest.TestCase):
                 self.assertEqual(events.find_eligible_events(self.user, **filters)[0][0], event_id)
         self.assertEqual(events.find_eligible_events(self.user, department="Other"), [])
 
+    def test_ineligible_students_can_see_events_but_cannot_apply(self):
+        event_id = self.create(
+            required_skills={"Python": 4}, department="Other Department"
+        )
+        visible = events.find_eligible_events(self.user)
+        self.assertIn(event_id, [visible_id for visible_id, _event in visible])
+        self.assertEqual(
+            events.find_eligible_events(self.user, department="Other Department")[0][0],
+            event_id,
+        )
+
+        response = self.client.get("/events/discover")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Not eligible to apply", response.data)
+        self.assertIn(b"Python (rating 4 required)", response.data)
+        self.assertIn(b"Great match", response.data)
+        self.assertIn(b"New", response.data)
+        detail = self.client.get(f"/events/{event_id}")
+        self.assertIn(b"Required skills not met", detail.data)
+        self.assertNotIn(b'>Apply</button>', detail.data)
+
+        response = self.client.post(
+            f"/events/{event_id}/apply",
+            data={"csrf_token": "test-csrf"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertIn(b"Python (rating 4 required)", response.data)
+        self.assertNotIn("test_volunteer", data_store.load("applications.json").get(event_id, {}))
+        with self.assertRaisesRegex(ValueError, "skills"):
+            events.apply_to_event("test_volunteer", event_id)
+
+    def test_open_events_are_visible_to_organizers_but_they_cannot_apply(self):
+        data_store.save("users.json", {
+            "test_volunteer": self.user,
+            "test_organizer": {
+                "name": "Organizer", "role": "Organizer",
+                "dept": None, "skills": {},
+            },
+        })
+        event_id = self.create(required_skills={})
+        with self.client.session_transaction() as session:
+            session["username"] = "test_organizer"
+
+        listing = self.client.get("/events/discover")
+        self.assertEqual(listing.status_code, 200)
+        self.assertIn(b"Campus Workshop", listing.data)
+        self.assertIn(b"Only student volunteers can apply.", listing.data)
+        response = self.client.post(
+            f"/events/{event_id}/apply",
+            data={"csrf_token": "test-csrf"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertIn(b"Only student volunteers can apply.", response.data)
+        with self.assertRaisesRegex(ValueError, "Only student volunteers"):
+            events.apply_to_event("test_organizer", event_id)
+
     def test_date_filter_falls_back_to_start(self):
         event_id = self.create(date=None)
         event = data_store.load("events.json")[event_id]

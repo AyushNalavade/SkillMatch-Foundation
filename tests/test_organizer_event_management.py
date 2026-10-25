@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import data_store
 from app import app
+from dashboard_service import organizer_event_form_values
 
 
 class OrganizerEventManagementTests(unittest.TestCase):
@@ -149,6 +150,31 @@ class OrganizerEventManagementTests(unittest.TestCase):
         response = self.client.post("/dashboard/events/new", data=self.form(csrf_token=""))
         self.assertEqual(response.status_code, 400)
         self.assertEqual(data_store.load("events.json"), {})
+
+    def test_decimal_durations_are_accepted_and_cleanly_refilled(self):
+        for event_id, duration in zip(("e1", "e2", "e3"), ("1.5", "2.25", "0.5")):
+            response = self.client.post(
+                "/dashboard/events/new", data=self.form(duration=duration)
+            )
+            self.assertEqual(response.status_code, 303)
+            self.assertEqual(
+                data_store.load("events.json")[event_id]["duration_hours"],
+                float(duration),
+            )
+        values = organizer_event_form_values({"duration_hours": 2.5000001})
+        self.assertEqual(values["duration"], "2.5")
+        response = self.client.get("/dashboard/events/e1/edit")
+        self.assertIn(b'step="any"', response.data)
+
+    def test_invalid_durations_are_rejected_without_saving(self):
+        for duration in ("0", "-0.5", "nan", "inf", "not-a-number"):
+            with self.subTest(duration=duration):
+                response = self.client.post(
+                    "/dashboard/events/new", data=self.form(duration=duration)
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(b"duration", response.data.lower())
+                self.assertEqual(data_store.load("events.json"), {})
 
 
 if __name__ == "__main__":

@@ -15,6 +15,14 @@
 
           <p><strong>Organizer:</strong> {{ event.organizer }}</p>
           <p><strong>Seats remaining:</strong> {{ match.seats_left }}</p>
+          {% if event.get("duration_hours") is not none %}
+            <p><strong>Duration:</strong> {{ event.duration_hours|format_decimal }} hours</p>
+          {% endif %}
+          {% if match.eligibility_reason %}
+            <p class="not-eligible-note" role="status">
+              Not eligible to apply. {{ match.eligibility_reason }}
+            </p>
+          {% endif %}
 
           {% if event.required_skills %}
             <p>
@@ -41,15 +49,14 @@
           {% endif %}
 
           {% if match.badges %}
-            <div aria-label="Event badges"
-                 style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.75rem">
+            <div class="event-badges" aria-label="Event badges">
               {% for badge in match.badges %}
-                <span class="status-pill" style="margin:0">{{ badge }}</span>
+                <span class="status-pill">{{ badge }}</span>
               {% endfor %}
             </div>
           {% endif %}
 
-          <div class="saved-event-control" aria-live="polite" style="margin-top:1rem">
+          <div class="saved-event-control" aria-live="polite">
             <form method="post"
                   action="{{ url_for('events.toggle_saved', event_id=match.event_id) }}"
                   hx-post="{{ url_for('events.toggle_saved', event_id=match.event_id) }}"
@@ -67,7 +74,7 @@
           </div>
           {% set event_url = url_for('events.event_detail', event_id=match.event_id, _external=True) %}
           {% set whatsapp_text = event.name ~ " " ~ event_url %}
-          <div aria-label="Share event" style="display:flex; flex-wrap:wrap; gap:0.75rem; margin-top:0.75rem">
+          <div class="event-share" aria-label="Share event">
             <a class="button button--secondary"
                href="https://wa.me/?text={{ whatsapp_text|urlencode }}"
                target="_blank"
@@ -95,7 +102,7 @@
     <header class="section-heading">
       <p class="eyebrow">Volunteer opportunities</p>
       <h1 id="discover-title">Discover events</h1>
-      <p>Find open events that match your skills. Results update as you search or change a filter.</p>
+      <p>Browse all open events. Skill requirements determine whether you can apply; search and filters only narrow the list.</p>
     </header>
 
     <form id="discover-filters"
@@ -107,8 +114,7 @@
           hx-swap="innerHTML"
           hx-sync="this:replace"
           aria-label="Search and filter events">
-      <div class="team-card"
-           style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap:1rem">
+      <div class="team-card event-filter-grid">
         <label>
           Search events
           <input type="search"
@@ -165,8 +171,7 @@
 
     <section id="event-results"
              aria-label="Matching events"
-             aria-live="polite"
-             style="margin-top:1.5rem">
+             aria-live="polite">
       {{ render_event_cards(event_cards) }}
     </section>
   </section>

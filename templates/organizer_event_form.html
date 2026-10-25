@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "macros.html" import toast %}
+
+{% block title %}{{ "Create" if mode == "create" else "Edit" }} event · SkillMatch{% endblock %}
+
+{% block content %}
+  <section class="event-form-panel" aria-labelledby="event-form-title">
+    <p class="eyebrow">Organizer workspace</p>
+    <h1 id="event-form-title">{{ "Create an event" if mode == "create" else "Edit event" }}</h1>
+    <p>Share the details students need to decide whether to apply.</p>
+
+    {% if error %}{{ toast(error, "error") }}{% endif %}
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+      {{ toast(message, category) }}
+    {% endfor %}
+
+    <form class="event-form" method="post"
+          action="{% if mode == 'create' %}{{ url_for('dashboard.create_event') }}{% else %}{{ url_for('dashboard.save_event_edits', event_id=event_id) }}{% endif %}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+      <div class="event-form-grid">
+        <p class="event-form-field">
+          <label for="title">Title</label>
+          <input id="title" name="title" type="text" maxlength="120" required
+                 value="{{ form_values.get('title', '') }}">
+        </p>
+        <p class="event-form-field">
+          <label for="department">Department</label>
+          <input id="department" name="department" type="text" maxlength="100" required
+                 value="{{ form_values.get('department', '') }}">
+        </p>
+        <p class="event-form-field">
+          <label for="event_type">Event type</label>
+          <input id="event_type" name="event_type" type="text" maxlength="100" required
+                 value="{{ form_values.get('event_type', '') }}">
+        </p>
+        <p class="event-form-field">
+          <label for="venue">Venue</label>
+          <input id="venue" name="venue" type="text" maxlength="160" required
+                 value="{{ form_values.get('venue', '') }}">
+        </p>
+        <p class="event-form-field">
+          <label for="date">Date</label>
+          <input id="date" name="date" type="date" required
+                 value="{{ form_values.get('date', '') }}">
+        </p>
+        <p class="event-form-field">
+          <label for="start_time">Start time (IST)</label>
+          <input id="start_time" name="start_time" type="time" required
+                 value="{{ form_values.get('start_time', '09:00') }}">
+        </p>
+        <p class="event-form-field">
+          <label for="duration">Duration (hours)</label>
+          <input id="duration" name="duration" type="number" min="0.01" max="72" step="any" required
+                 value="{{ form_values.get('duration', '1') }}">
+        </p>
+        <p class="event-form-field">
+          <label for="seats">Volunteer seats</label>
+          <input id="seats" name="seats" type="number" min="1" max="10000" step="1" required
+                 value="{{ form_values.get('seats', '') }}">
+        </p>
+        <p class="event-form-field event-form-field--wide">
+          <label for="description">Description</label>
+          <textarea id="description" name="description" rows="5" maxlength="3000" required>{{ form_values.get('description', '') }}</textarea>
+        </p>
+        <p class="event-form-field event-form-field--wide">
+          <label for="required_skills">Required skills and minimum ratings</label>
+          <textarea id="required_skills" name="required_skills" rows="4" required
+                    aria-describedby="skills-help">{{ form_values.get('required_skills', '') }}</textarea>
+          <small id="skills-help">Enter one per line, for example: Python: 2</small>
+        </p>
+      </div>
+
+      <div class="event-form-actions">
+        <button class="button button--primary" type="submit">
+          {{ "Create event" if mode == "create" else "Save changes" }}
+        </button>
+        <a class="button button--secondary" href="{{ url_for('dashboard.home') }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

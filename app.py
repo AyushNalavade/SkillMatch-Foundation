@@ -8,9 +8,11 @@ from auth_routes import auth_bp
 from certificate_routes import certificates_bp
 from dashboard_routes import dashboard_bp
 from event_routes import events_bp
+from formatting import format_decimal
 
 
 app = Flask(__name__)
+app.jinja_env.filters["format_decimal"] = format_decimal
 app.register_blueprint(auth_bp)
 app.register_blueprint(certificates_bp)
 app.register_blueprint(dashboard_bp)

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from data_store import load, save
 from event_service import EVENTS_FILE as EVENT_RECORDS_FILE, create_event, validate_event_data
+from formatting import format_decimal
 
 
 EVENTS_FILE = "events.json"
@@ -256,7 +257,7 @@ def organizer_event_form_values(event: Mapping[str, Any] | None = None) -> dict[
         "date": event_date if isinstance(event_date, str) else "",
         "start_time": starts_at.strftime("%H:%M") if starts_at else "09:00",
         "venue": str(event.get("location", event.get("venue", ""))),
-        "duration": str(duration),
+        "duration": format_decimal(duration),
         "seats": str(event.get("slots_needed", "")),
     }
 

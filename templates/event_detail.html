@@ -65,16 +65,16 @@
         <p class="eyebrow">Event {{ event_id }} · {{ event.status }}</p>
         <h1 id="event-detail-title">{{ event.name }}</h1>
         {% if badges %}
-          <div aria-label="Event badges" style="display:flex; flex-wrap:wrap; gap:0.5rem">
+          <div class="event-badges" aria-label="Event badges">
             {% for badge in badges %}
-              <span class="status-pill" style="margin:0">{{ badge }}</span>
+              <span class="status-pill">{{ badge }}</span>
             {% endfor %}
           </div>
         {% endif %}
-        <div style="margin-top:1rem">
+        <div class="event-detail-bookmark">
           {{ bookmark_control() }}
         </div>
-        <div aria-label="Share event" style="display:flex; flex-wrap:wrap; gap:0.75rem; margin-top:0.75rem">
+        <div class="event-share" aria-label="Share event">
           <a class="button button--secondary"
              href="https://wa.me/?text={{ whatsapp_text|urlencode }}"
              target="_blank"
@@ -88,7 +88,7 @@
 
       <section class="team-card" aria-labelledby="event-about-title">
         <h2 id="event-about-title">About this event</h2>
-        <p style="white-space:pre-wrap">{{ event.description }}</p>
+        <p class="event-description">{{ event.description }}</p>
         <dl>
           <dt>Organizer</dt><dd>{{ event.organizer }}</dd>
           <dt>Event status</dt><dd>{{ event.status }}</dd>
@@ -109,6 +109,9 @@
           {% if event.get("ends_at") %}
             <dt>Ends</dt><dd>{{ event.ends_at }}</dd>
           {% endif %}
+          {% if duration_display is not none %}
+            <dt>Duration</dt><dd>{{ duration_display|format_decimal }} hours</dd>
+          {% endif %}
           {% if event.get("location") or event.get("venue") %}
             <dt>Location</dt><dd>{{ event.get("location") or event.get("venue") }}</dd>
           {% endif %}
@@ -128,7 +131,7 @@
         {% endif %}
       </section>
 
-      <div style="margin-top:1.5rem">
+      <div class="event-application-wrap">
         {{ application_control() }}
       </div>
     </article>

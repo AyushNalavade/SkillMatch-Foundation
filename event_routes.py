@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from flask import Blueprint, abort, g, redirect, render_template, request, url_for
 
 from auth_routes import _login_required, _require_csrf
-from auth_service import check_eligibility
 from data_store import load
 from event_service import (
     APPLICATIONS_FILE,
@@ -15,6 +14,7 @@ from event_service import (
     find_eligible_events,
     get_apply_status,
     get_badges,
+    get_event_eligibility_reason,
     get_saved_event_ids,
     toggle_saved_event as toggle_saved_event_service,
 )
@@ -42,7 +42,7 @@ def _seats_left(event, event_applications):
 @events_bp.get("/discover")
 @_login_required
 def discover():
-    """Show eligible events and return only event cards for HTMX requests."""
+    """Show open events to all signed-in users and return cards for HTMX requests."""
     filters = {
         "search": request.args.get("search", "").strip(),
         "skill": request.args.get("skill", "").strip(),
@@ -65,6 +65,7 @@ def discover():
             "seats_left": seats_left,
             "badges": get_badges({**event, "seats_left": seats_left}, user),
             "is_saved": event_id in saved_event_ids,
+            "eligibility_reason": get_event_eligibility_reason(user, event),
         })
 
     return render_template(
@@ -95,20 +96,25 @@ def _detail_context(event_id):
     ends_at = _as_utc_datetime(event.get("ends_at"))
     blocked_reason = None
     if status == "Apply":
-        if event.get("status") != "open":
+        if g.current_user.get("role") != "Student Volunteer":
+            blocked_reason = "Only student volunteers can apply."
+        elif event.get("status") != "open":
             blocked_reason = "This event is not open for applications."
         elif ends_at is not None and ends_at <= datetime.now(timezone.utc):
             blocked_reason = "This event has already ended."
         elif seats_left == 0:
             blocked_reason = "This event is full."
-        elif not check_eligibility(
-            g.current_user.get("skills", {}), event.get("required_skills", {})
-        ):
-            blocked_reason = "Your skills do not meet this event's requirements."
+        else:
+            blocked_reason = get_event_eligibility_reason(g.current_user, event)
 
     return {
         "event_id": event_id,
         "event": event,
+        "duration_display": (
+            event.get("duration_hours")
+            if isinstance(event.get("duration_hours"), (int, float))
+            else None
+        ),
         "seats_left": seats_left,
         "badges": get_badges({**event, "seats_left": seats_left}, g.current_user),
         "apply_status": status,
