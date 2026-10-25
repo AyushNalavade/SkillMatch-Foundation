@@ -11,6 +11,7 @@ from typing import Any
 
 from data_store import load, save
 from formatting import format_decimal
+from notification_service import add_notifications
 
 
 EVENTS_FILE = "events.json"
@@ -546,6 +547,15 @@ def complete_event(
             event["completed_at"] = datetime.now(timezone.utc).isoformat()
             events[event_id] = event
             save(EVENTS_FILE, events)
+            organizer_id = event.get("organizer")
+            if isinstance(organizer_id, str) and organizer_id.strip():
+                add_notifications(
+                    [organizer_id],
+                    kind="event_ended",
+                    title="Event ended",
+                    message=f"{event.get('name', 'Your event')} has been marked complete.",
+                    event_id=event_id,
+                )
             return True, "Event completed. There were no accepted volunteers to certify."
         if set(contribution_updates) != set(accepted):
             return False, "Enter final hours and notes for every accepted volunteer."
@@ -584,6 +594,22 @@ def complete_event(
         events[event_id] = event
         save(APPLICATIONS_FILE, applications)
         save(EVENTS_FILE, events)
+        organizer_id = event.get("organizer")
+        if isinstance(organizer_id, str) and organizer_id.strip():
+            add_notifications(
+                [organizer_id],
+                kind="event_ended",
+                title="Event ended",
+                message=f"{event.get('name', 'Your event')} has been marked complete.",
+                event_id=event_id,
+            )
+        add_notifications(
+            list(accepted),
+            kind="event_ended",
+            title="Event ended",
+            message=f"{event.get('name', 'The event')} has ended. Thank you for volunteering.",
+            event_id=event_id,
+        )
 
         for username in accepted:
             success, result = generate_certificate(event_id, username)
