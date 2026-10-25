@@ -240,7 +240,7 @@ summary {
 .welcome-panel {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(17rem, 0.8fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   align-items: center;
   gap: clamp(1.5rem, 3vw, 2.75rem);
   overflow: hidden;
@@ -280,12 +280,14 @@ summary {
 
 .campus-figure img {
   display: block;
-  width: 100%;
-  aspect-ratio: 1.35 / 1;
+  width: min(100%, 775px);
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: auto;
   border: 1px solid rgb(255 255 255 / 45%);
   border-radius: 1.15rem;
-  object-fit: cover;
-  object-position: 64% center;
+  object-fit: contain;
+  object-position: center;
   box-shadow: 0 16px 40px rgb(5 37 31 / 28%);
 }
 
@@ -556,6 +558,13 @@ summary {
 .empty-state-mark {
   color: var(--green);
   font-size: 1.8rem;
+}
+
+.not-eligible-note {
+  padding: 0.7rem 0.85rem;
+  border-left: 3px solid var(--coral);
+  color: var(--ink-soft);
+  background: #fff7f4;
 }
 
 .event-loading {
@@ -860,7 +869,7 @@ summary {
   }
 
   .welcome-panel {
-    grid-template-columns: minmax(0, 1.15fr) minmax(14rem, 0.85fr);
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
     gap: 1.5rem;
     padding: clamp(1.75rem, 4vw, 3rem);
   }
@@ -911,8 +920,8 @@ summary {
   }
 
   .campus-figure img {
-    aspect-ratio: 1.55 / 1;
-    object-position: 62% center;
+    aspect-ratio: auto;
+    object-position: center;
   }
 }
 
