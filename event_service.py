@@ -8,6 +8,7 @@ from typing import Any
 
 from auth_service import check_eligibility
 from data_store import load, save
+from notification_service import add_notifications
 
 
 EVENTS_FILE = "events.json"
@@ -485,6 +486,22 @@ def apply_to_event(user_id: str, event_id: str) -> str:
     }
     applications[event_id] = event_applications
     save(APPLICATIONS_FILE, applications)
+    organizer_id = event.get("organizer")
+    if isinstance(organizer_id, str) and organizer_id.strip():
+        volunteer_name = user.get("name")
+        if not isinstance(volunteer_name, str) or not volunteer_name.strip():
+            volunteer_name = user_id
+        event_name = event.get("name", "your event")
+        add_notifications(
+            [organizer_id],
+            kind="application_submitted",
+            title="New volunteer application",
+            message=(
+                f"{volunteer_name} applied to {event_name}. "
+                "Review the application in your dashboard."
+            ),
+            event_id=event_id,
+        )
     return "Applied"
 
 
