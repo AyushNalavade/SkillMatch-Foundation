@@ -148,6 +148,21 @@
       </div>
     </form>
 
+    <div id="event-loading" class="event-loading" role="status" aria-live="polite">
+      <p class="event-loading-label">Loading matching events…</p>
+      <div class="team-grid" aria-hidden="true">
+        {% for card in range(3) %}
+          <article class="team-card skeleton-card">
+            <span class="skeleton-line skeleton-line--short"></span>
+            <span class="skeleton-line skeleton-line--heading"></span>
+            <span class="skeleton-line"></span>
+            <span class="skeleton-line skeleton-line--medium"></span>
+            <span class="skeleton-line skeleton-line--button"></span>
+          </article>
+        {% endfor %}
+      </div>
+    </div>
+
     <section id="event-results"
              aria-label="Matching events"
              aria-live="polite"
