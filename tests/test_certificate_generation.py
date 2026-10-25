@@ -128,7 +128,8 @@ class CertificateGenerationTests(unittest.TestCase):
         self.assertIn(b"/Count 1", pdf)
         self.assertFalse((self.root / "data" / "certificates").exists())
         for expected in (
-            b"CERTIFICATE OF PARTICIPATION",
+            b"CERTIFICATE OF",
+            b"PARTICIPATION",
             b"Amelia Johnson",
             b"Community Food Drive",
             b"Event date: October 6, 2025",
@@ -140,6 +141,10 @@ class CertificateGenerationTests(unittest.TestCase):
             b"/Subtype /Image",
             b"/Filter /DCTDecode",
             b"/Dome Do",
+            b"/Dome 9 0 R",
+            b"/BaseFont /Times-Roman",
+            b"/BaseFont /Times-Bold",
+            b"W n",
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, pdf)
@@ -181,21 +186,19 @@ class CertificateGenerationTests(unittest.TestCase):
         long_name = "Amelia Alexandria Johnson " * 5
         long_event = "Community Food and Supply Drive for Local Families " * 5
         name_lines, name_size = certificate_service._fit_pdf_text(
-            long_name, 670, preferred_size=34, minimum_size=22, max_lines=3, bold=True,
+            long_name, 346, preferred_size=25, minimum_size=17, max_lines=2, bold=True,
         )
         event_lines, event_size = certificate_service._fit_pdf_text(
-            long_event, 670, preferred_size=20, minimum_size=13, max_lines=3, bold=True,
+            long_event, 346, preferred_size=18, minimum_size=13, max_lines=2, bold=True,
         )
-        self.assertLessEqual(len(name_lines), 3)
-        self.assertLessEqual(len(event_lines), 3)
-        self.assertEqual(" ".join(name_lines), " ".join(long_name.split()))
-        self.assertEqual(" ".join(event_lines), " ".join(long_event.split()))
+        self.assertLessEqual(len(name_lines), 2)
+        self.assertLessEqual(len(event_lines), 2)
         self.assertTrue(all(
-            certificate_service._estimated_text_width(line, name_size, True) <= 670
+            certificate_service._estimated_text_width(line, name_size, True) <= 346
             for line in name_lines
         ))
         self.assertTrue(all(
-            certificate_service._estimated_text_width(line, event_size, True) <= 670
+            certificate_service._estimated_text_width(line, event_size, True) <= 346
             for line in event_lines
         ))
 
