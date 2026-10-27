@@ -1,0 +1,179 @@
+{% if not partial %}{% extends "base.html" %}{% endif %}
+{% from "macros.html" import empty_state %}
+
+{% macro render_event_cards(matches) -%}
+  {% if matches %}
+    <div class="team-grid" aria-live="polite">
+      {% for match in matches %}
+        {% set event = match.event %}
+        <article class="team-card" aria-labelledby="event-title-{{ match.event_id }}">
+          <p class="eyebrow">Event · {{ match.event_id }}</p>
+          <h3 id="event-title-{{ match.event_id }}">
+            <a href="{{ url_for('events.event_detail', event_id=match.event_id) }}">{{ event.name }}</a>
+          </h3>
+          <p>{{ event.description }}</p>
+
+          <p><strong>Organizer:</strong> {{ event.organizer }}</p>
+          <p><strong>Seats remaining:</strong> {{ match.seats_left }}</p>
+          {% if event.get("duration_hours") is not none %}
+            <p><strong>Duration:</strong> {{ event.duration_hours|format_decimal }} hours</p>
+          {% endif %}
+          {% if match.eligibility_reason %}
+            <p class="not-eligible-note" role="status">
+              Not eligible to apply. {{ match.eligibility_reason }}
+            </p>
+          {% endif %}
+
+          {% if event.required_skills %}
+            <p>
+              <strong>Skills needed:</strong>
+              {% for skill_name, rating in event.required_skills.items() %}
+                {{ skill_name }} ({{ rating }}){% if not loop.last %}, {% endif %}
+              {% endfor %}
+            </p>
+          {% else %}
+            <p><strong>Skills needed:</strong> No specific skills</p>
+          {% endif %}
+
+          {% set event_department = event.get("department", event.get("dept")) %}
+          {% if event_department %}
+            <p><strong>Department:</strong> {{ event_department }}</p>
+          {% endif %}
+          {% set event_type = event.get("type", event.get("event_type")) %}
+          {% if event_type %}
+            <p><strong>Type:</strong> {{ event_type }}</p>
+          {% endif %}
+          {% set event_date = event.get("date", event.get("event_date", event.get("starts_at", event.get("start_at")))) %}
+          {% if event_date %}
+            <p><strong>Starts:</strong> {{ event_date }}</p>
+          {% endif %}
+
+          {% if match.badges %}
+            <div class="event-badges" aria-label="Event badges">
+              {% for badge in match.badges %}
+                <span class="status-pill">{{ badge }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <div class="saved-event-control" aria-live="polite">
+            <form method="post"
+                  action="{{ url_for('events.toggle_saved', event_id=match.event_id) }}"
+                  hx-post="{{ url_for('events.toggle_saved', event_id=match.event_id) }}"
+                  hx-trigger="submit"
+                  hx-target="closest .saved-event-control"
+                  hx-swap="outerHTML"
+                  hx-disabled-elt="find button">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="button {{ 'button--secondary' if match.is_saved else 'button--primary' }}"
+                      type="submit"
+                      aria-pressed="{{ 'true' if match.is_saved else 'false' }}">
+                {{ "Saved" if match.is_saved else "Save event" }}
+              </button>
+            </form>
+          </div>
+          {% set event_url = url_for('events.event_detail', event_id=match.event_id, _external=True) %}
+          {% set whatsapp_text = event.name ~ " " ~ event_url %}
+          <div class="event-share" aria-label="Share event">
+            <a class="button button--secondary"
+               href="https://wa.me/?text={{ whatsapp_text|urlencode }}"
+               target="_blank"
+               rel="noopener noreferrer">Share on WhatsApp</a>
+            <button class="button button--secondary"
+                    type="button"
+                    data-copy-event-link="{{ event_url }}"
+                    aria-live="polite">Copy event link</button>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    {{ empty_state("No events found. Try adjusting your search or filters.", "Adjust filters", "#discover-filters") }}
+  {% endif %}
+{%- endmacro %}
+
+{% block title %}{% if not partial %}Discover Events · SkillMatch{% endif %}{% endblock %}
+
+{% block content %}
+  {% if partial %}
+    {{ render_event_cards(event_cards) }}
+  {% else %}
+  <section class="discover-page" aria-labelledby="discover-title">
+    <header class="section-heading">
+      <p class="eyebrow">Volunteer opportunities</p>
+      <h1 id="discover-title">Discover events</h1>
+      <p>Browse all open events. Skill requirements determine whether you can apply; search and filters only narrow the list.</p>
+    </header>
+
+    <form id="discover-filters"
+          action="{{ url_for('events.discover') }}"
+          method="get"
+          hx-get="{{ url_for('events.discover') }}"
+          hx-trigger="input delay:350ms, change, submit"
+          hx-target="#event-results"
+          hx-swap="innerHTML"
+          hx-sync="this:replace"
+          aria-label="Search and filter events">
+      <div class="team-card event-filter-grid">
+        <label>
+          Search events
+          <input type="search"
+                 name="search"
+                 value="{{ filters.search }}"
+                 placeholder="Name, description, or organizer"
+                 autocomplete="off">
+        </label>
+        <label>
+          Skill
+          <input type="search"
+                 name="skill"
+                 value="{{ filters.skill }}"
+                 placeholder="For example, Gardening"
+                 autocomplete="off">
+        </label>
+        <label>
+          Department
+          <input type="search"
+                 name="department"
+                 value="{{ filters.department }}"
+                 placeholder="Filter by department"
+                 autocomplete="off">
+        </label>
+        <label>
+          Event type
+          <input type="search"
+                 name="type"
+                 value="{{ filters.type }}"
+                 placeholder="For example, Workshop"
+                 autocomplete="off">
+        </label>
+        <label>
+          Date
+          <input type="date" name="date" value="{{ filters.date }}">
+        </label>
+      </div>
+    </form>
+
+    <div id="event-loading" class="event-loading" role="status" aria-live="polite">
+      <p class="event-loading-label">Loading matching events…</p>
+      <div class="team-grid" aria-hidden="true">
+        {% for card in range(3) %}
+          <article class="team-card skeleton-card">
+            <span class="skeleton-line skeleton-line--short"></span>
+            <span class="skeleton-line skeleton-line--heading"></span>
+            <span class="skeleton-line"></span>
+            <span class="skeleton-line skeleton-line--medium"></span>
+            <span class="skeleton-line skeleton-line--button"></span>
+          </article>
+        {% endfor %}
+      </div>
+    </div>
+
+    <section id="event-results"
+             aria-label="Matching events"
+             aria-live="polite">
+      {{ render_event_cards(event_cards) }}
+    </section>
+  </section>
+  {% endif %}
+{% endblock %}
