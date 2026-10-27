@@ -21,10 +21,20 @@ app.register_blueprint(events_bp)
 app.register_blueprint(notifications_bp)
 
 
+def home_steps() -> list[dict[str, str]]:
+    """Return the four public steps shown on the home page."""
+    return [
+        {"number": "01", "title": "Find an event that fits your skills"},
+        {"number": "02", "title": "Apply in one click"},
+        {"number": "03", "title": "Get accepted by the organizer"},
+        {"number": "04", "title": "Earn a certificate anyone can verify"},
+    ]
+
+
 @app.get("/")
 def home():
     """Show the shared foundation landing page."""
-    return render_template("index.html")
+    return render_template("index.html", steps=home_steps())
 
 
 # Teammate 1 — Accounts and profiles: import and register the accounts Blueprint here.
