@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}SkillMatch · Campus events and volunteering{% endblock %}
+
+{% block content %}
+  <section class="home-hero" aria-labelledby="welcome-title">
+    <img
+      class="home-hero-image"
+      src="{{ url_for('static', filename='images/mitwpu-dome.jpeg') }}"
+      alt="The Dome and stone arcade at MIT World Peace University in Pune"
+      width="775"
+      height="517"
+      fetchpriority="high"
+    >
+    <div class="home-hero-content">
+      <p class="eyebrow">MIT World Peace University · Pune</p>
+      <h1 id="welcome-title">Campus service,<br>matched by <span class="hero-highlight">skill</span>.</h1>
+      <p class="welcome-copy">
+        Discover campus events that fit your skills, apply to volunteer, and track your
+        contributions. Organizers can review applicants and issue certificates after events.
+      </p>
+      <p><a class="button button--primary" href="{{ url_for('events.discover') }}">Explore campus events</a></p>
+    </div>
+    <p class="home-hero-caption">MIT World Peace University · Pune</p>
+  </section>
+
+  <section id="team-areas" class="home-steps" aria-labelledby="team-title">
+    <div class="section-heading">
+      <p class="eyebrow">How SkillMatch works</p>
+      <h2 id="team-title">From event discovery to recognition</h2>
+    </div>
+    <ol class="home-steps-grid">
+      {% for step in steps %}
+        <li class="home-step">
+          <span class="home-step-number" aria-hidden="true">{{ step.number }}</span>
+          <h3>{{ step.title }}</h3>
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+{% endblock %}
