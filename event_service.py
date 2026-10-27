@@ -1,9 +1,10 @@
 """Event creation backed by the shared JSON data store."""
 
+import calendar
 import math
 import re
 from collections.abc import Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import date as calendar_date, datetime, timedelta, timezone
 from typing import Any
 
 from auth_service import check_eligibility
@@ -368,6 +369,90 @@ def _remaining_seats(event: Mapping[str, Any]) -> int | None:
         and application["status"].casefold() == "accepted"
     )
     return slots_needed - accepted_count
+
+
+def event_card_data(
+    event: Mapping[str, Any], student_skills: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Prepare display-only date, seat, and skill-match data for an event."""
+    if not isinstance(event, Mapping):
+        raise ValueError("Event must be a mapping.")
+
+    required_skills = event.get("required_skills", {})
+    if not isinstance(required_skills, Mapping):
+        raise ValueError("'required_skills' must be a mapping.")
+    if not isinstance(student_skills, Mapping):
+        student_skills = {}
+
+    ratings_by_name = {
+        name.strip().casefold(): rating
+        for name, rating in student_skills.items()
+        if isinstance(name, str)
+        and name.strip()
+        and isinstance(rating, int)
+        and not isinstance(rating, bool)
+        and rating >= 0
+    }
+    skills = []
+    for name, required_rating in required_skills.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Required skill names must be non-empty strings.")
+        if (
+            not isinstance(required_rating, int)
+            or isinstance(required_rating, bool)
+            or required_rating < 0
+        ):
+            raise ValueError("Required skill ratings must be non-negative integers.")
+        student_rating = ratings_by_name.get(name.strip().casefold())
+        skills.append({
+            "name": name.strip(),
+            "student_rating": student_rating,
+            "required_rating": required_rating,
+            "met": student_rating is not None and student_rating >= required_rating,
+        })
+
+    date_value = _first_event_value(
+        event, ("date", "event_date", "starts_at", "start_at", "start_date")
+    )
+    parsed_date = None
+    if isinstance(date_value, datetime):
+        parsed_date = date_value.date()
+    elif isinstance(date_value, calendar_date):
+        parsed_date = date_value
+    elif isinstance(date_value, str) and date_value.strip():
+        raw_date = date_value.strip()
+        try:
+            if len(raw_date) == 10:
+                parsed_date = calendar_date.fromisoformat(raw_date)
+            else:
+                parsed_date = datetime.fromisoformat(
+                    raw_date.replace("Z", "+00:00")
+                ).date()
+        except ValueError:
+            parsed_date = None
+
+    capacity = event.get("slots_needed")
+    if (
+        isinstance(capacity, int)
+        and not isinstance(capacity, bool)
+        and capacity > 0
+    ):
+        remaining = _remaining_seats(event)
+        seats_left = capacity if remaining is None else max(0, min(capacity, remaining))
+        seats_filled_percent = round((capacity - seats_left) * 100 / capacity)
+    else:
+        capacity = None
+        seats_left = None
+        seats_filled_percent = 0
+
+    return {
+        "day": parsed_date.strftime("%d") if parsed_date else "",
+        "month": calendar.month_abbr[parsed_date.month] if parsed_date else "",
+        "seats_left": seats_left,
+        "total_seats": capacity,
+        "seats_filled_percent": seats_filled_percent,
+        "skills": skills,
+    }
 
 
 def get_badges(event: Mapping[str, Any], user: Mapping[str, Any]) -> list[str]:
