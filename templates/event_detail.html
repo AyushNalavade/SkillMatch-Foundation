@@ -1,5 +1,6 @@
 {% if not partial %}{% extends "base.html" %}{% endif %}
 {% from "macros.html" import toast %}
+{% from "event_card_data.html" import event_date_block, event_skills_and_seats %}
 
 {% macro application_control() -%}
   <section id="event-application" aria-label="Event application" aria-live="polite">
@@ -49,6 +50,12 @@
   </section>
 {%- endmacro %}
 
+{% block extra_css %}
+  {% if not partial %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='event-cards.css') }}">
+  {% endif %}
+{% endblock %}
+
 {% block title %}{% if not partial %}{{ event.name }} · SkillMatch{% endif %}{% endblock %}
 
 {% block content %}
@@ -62,8 +69,9 @@
       <header class="section-heading">
         {% set event_url = url_for('events.event_detail', event_id=event_id, _external=True) %}
         {% set whatsapp_text = event.name ~ " " ~ event_url %}
-        <p class="eyebrow">Event {{ event_id }} · {{ event.status }}</p>
+        <p class="eyebrow">Volunteer opportunity</p>
         <h1 id="event-detail-title">{{ event.name }}</h1>
+        <span class="event-status-chip">{{ event.status }}</span>
         {% if badges %}
           <div class="event-badges" aria-label="Event badges">
             {% for badge in badges %}
@@ -89,6 +97,15 @@
       <section class="team-card" aria-labelledby="event-about-title">
         <h2 id="event-about-title">About this event</h2>
         <p class="event-description">{{ event.description }}</p>
+        <div class="event-detail-summary">
+          {{ event_date_block(card_data) }}
+          <div class="event-detail-summary__content">
+            {{ event_skills_and_seats(
+                 card_data,
+                 current_user.role == "Student Volunteer"
+               ) }}
+          </div>
+        </div>
         <dl>
           <dt>Organizer</dt><dd>{{ event.organizer }}</dd>
           <dt>Event status</dt><dd>{{ event.status }}</dd>
@@ -119,16 +136,6 @@
             <dt>Created</dt><dd>{{ event.created_at }}</dd>
           {% endif %}
         </dl>
-        <h2>Required skills</h2>
-        {% if event.required_skills %}
-          <ul>
-            {% for name, rating in event.required_skills.items() %}
-              <li>{{ name }}: minimum rating {{ rating }}</li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p>No specific skills are required.</p>
-        {% endif %}
       </section>
 
       <div class="event-application-wrap">
