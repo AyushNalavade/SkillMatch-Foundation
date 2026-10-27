@@ -4,7 +4,7 @@
 {% block title %}{% if editing %}Edit profile{% else %}Your profile{% endif %} · SkillMatch{% endblock %}
 
 {% block content %}
-  <section class="not-found-panel" aria-labelledby="profile-title">
+  <section class="not-found-panel profile-panel" aria-labelledby="profile-title">
     <p class="eyebrow">{{ user.role }}</p>
     {% if editing %}
       <h1 id="profile-title">Edit your profile</h1>

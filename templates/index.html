@@ -1,56 +1,41 @@
 {% extends "base.html" %}
 
-{% block title %}SkillMatch · Shared foundation{% endblock %}
+{% block title %}SkillMatch · Campus events and volunteering{% endblock %}
 
 {% block content %}
-  <section class="welcome-panel" aria-labelledby="welcome-title">
-    <div class="welcome-copy-column">
-      <p class="eyebrow">Shared starter foundation</p>
-      <h1 id="welcome-title">Campus service, matched by skill.</h1>
+  <section class="home-hero" aria-labelledby="welcome-title">
+    <img
+      class="home-hero-image"
+      src="{{ url_for('static', filename='images/mitwpu-dome.jpeg') }}"
+      alt="The Dome and stone arcade at MIT World Peace University in Pune"
+      width="775"
+      height="517"
+      fetchpriority="high"
+    >
+    <div class="home-hero-content">
+      <p class="eyebrow">MIT World Peace University · Pune</p>
+      <h1 id="welcome-title">Campus service,<br>matched by <span class="hero-highlight">skill</span>.</h1>
       <p class="welcome-copy">
-        SkillMatch will connect student volunteers with campus events that need their skills.
-        This shared foundation is ready for each teammate to add their own feature area.
+        Discover campus events that fit your skills, apply to volunteer, and track your
+        contributions. Organizers can review applicants and issue certificates after events.
       </p>
-      <p class="status-pill"><span aria-hidden="true"></span> Feature routes are not added yet</p>
+      <p><a class="button button--primary" href="{{ url_for('events.discover') }}">Explore campus events</a></p>
     </div>
-    <figure class="campus-figure">
-      <img
-        src="{{ url_for('static', filename='images/mitwpu-dome.jpeg') }}"
-        alt="The Dome and stone arcade at MIT World Peace University in Pune"
-        width="775"
-        height="517"
-        fetchpriority="high"
-      >
-      <figcaption>MIT World Peace University · Pune</figcaption>
-    </figure>
+    <p class="home-hero-caption">MIT World Peace University · Pune</p>
   </section>
 
-  <section id="team-areas" class="team-section" aria-labelledby="team-title">
+  <section id="team-areas" class="home-steps" aria-labelledby="team-title">
     <div class="section-heading">
-      <p class="eyebrow">Shared ownership</p>
-      <h2 id="team-title">Four areas, one foundation</h2>
+      <p class="eyebrow">How SkillMatch works</p>
+      <h2 id="team-title">From event discovery to recognition</h2>
     </div>
-    <div class="team-grid">
-      <article class="team-card">
-        <span class="team-number">01</span>
-        <h3>Accounts and profiles</h3>
-        <p>Student and organizer identity, profile details, and skills.</p>
-      </article>
-      <article class="team-card">
-        <span class="team-number">02</span>
-        <h3>Events and matching</h3>
-        <p>Campus opportunities and the skills each event needs.</p>
-      </article>
-      <article class="team-card">
-        <span class="team-number">03</span>
-        <h3>Applications and review</h3>
-        <p>Volunteer applications and organizer decisions.</p>
-      </article>
-      <article class="team-card">
-        <span class="team-number">04</span>
-        <h3>Contributions and recognition</h3>
-        <p>Completed volunteer hours, contribution notes, and certificates.</p>
-      </article>
-    </div>
+    <ol class="home-steps-grid">
+      {% for step in steps %}
+        <li class="home-step">
+          <span class="home-step-number" aria-hidden="true">{{ step.number }}</span>
+          <h3>{{ step.title }}</h3>
+        </li>
+      {% endfor %}
+    </ol>
   </section>
 {% endblock %}

@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#17243b">
     <title>{% block title %}SkillMatch{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block extra_css %}{% endblock %}
     {% block head_extra %}{% endblock %}
   </head>
   <body>
@@ -34,6 +35,14 @@
               <a href="{{ url_for('dashboard.home') }}">Organizer dashboard</a>
             {% endif %}
             {% if current_user %}
+              <a href="{{ url_for('notifications.home') }}">
+                Notifications
+                {% if notification_unread_count %}
+                  <span class="notification-count" aria-label="{{ notification_unread_count }} unread">
+                    {{ notification_unread_count }}
+                  </span>
+                {% endif %}
+              </a>
               <a href="{{ url_for('auth.profile') }}">Profile</a>
             {% else %}
               <a href="{{ url_for('auth.login') }}">Sign in</a>
@@ -63,10 +72,12 @@
         {% if active_role == "Organizer" %}
           <p class="sidebar-placeholder">Organizer workspace</p>
           <a href="{{ url_for('dashboard.home') }}">Review applications</a>
+          <a href="{{ url_for('notifications.home') }}">Notifications{% if notification_unread_count %} ({{ notification_unread_count }}){% endif %}</a>
           <a href="{{ url_for('certificates.home') }}">Complete events &amp; certificates</a>
         {% elif active_role == "Student Volunteer" %}
           <p class="sidebar-placeholder">Volunteer workspace</p>
           <a href="{{ url_for('events.discover') }}">Find events</a>
+          <a href="{{ url_for('notifications.home') }}">Notifications{% if notification_unread_count %} ({{ notification_unread_count }}){% endif %}</a>
           <a href="{{ url_for('certificates.home') }}">My certificates</a>
         {% else %}
           <p class="sidebar-placeholder">Sign in to use your SkillMatch workspace.</p>
@@ -81,7 +92,6 @@
         </main>
         <footer class="site-footer">
           <span>SkillMatch</span>
-          <span>Shared campus volunteering foundation</span>
         </footer>
       </div>
     </div>
