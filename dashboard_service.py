@@ -1,6 +1,7 @@
 """Organizer dashboard and volunteer-review operations backed by JSON storage."""
 
 from collections.abc import Mapping
+import calendar
 import math
 from datetime import date, datetime, time as time_value, timedelta, timezone
 from typing import Any
@@ -135,6 +136,37 @@ def get_organizer_events(organizer_id: str) -> list[dict[str, Any]]:
             else "",
         ),
     )
+
+
+def dashboard_cards(username: str) -> list[dict[str, Any]]:
+    """Build display-ready event summaries for one organizer."""
+    cards = []
+    for item in get_organizer_events(username):
+        event = item["event"]
+        event_date = event_calendar_date(event)
+        status = event.get("status")
+        if not isinstance(status, str) or not status.strip():
+            raise ValueError(f"Event '{item['event_id']}' must have a status.")
+
+        counts = {
+            "pending": item["pending_count"],
+            "accepted": item["accepted_count"],
+            "rejected": item["rejected_count"],
+        }
+        cards.append({
+            "event_id": item["event_id"],
+            "event": event,
+            "day": event_date.strftime("%d") if event_date else "",
+            "month": calendar.month_abbr[event_date.month] if event_date else "",
+            "status": status,
+            "seats_filled": counts["accepted"],
+            "total_seats": event["slots_needed"],
+            "applicant_counts": [
+                {"status": key, "label": key.title(), "count": counts[key]}
+                for key in ("pending", "accepted", "rejected")
+            ],
+        })
+    return cards
 
 
 def _event_form_payload(organizer_id: str, form: Mapping[str, Any]) -> dict[str, Any]:
@@ -307,6 +339,51 @@ def get_organizer_event(organizer_id: str, event_id: str) -> dict[str, Any]:
     return event
 
 
+def compare_applicant_skills(
+    applicant_skills: Mapping[str, Any],
+    required_skills: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Compare required event skills to applicant ratings without case sensitivity."""
+    if not isinstance(applicant_skills, Mapping):
+        raise ValueError("Applicant skills must be an object.")
+    if not isinstance(required_skills, Mapping):
+        raise ValueError("Required skills must be an object.")
+
+    applicant_ratings: dict[str, int] = {}
+    for name, rating in applicant_skills.items():
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(rating, int)
+            or isinstance(rating, bool)
+            or rating < 0
+        ):
+            raise ValueError("Applicant skill names and ratings are invalid.")
+        applicant_ratings[name.strip().casefold()] = rating
+
+    comparisons = []
+    for name, required_rating in required_skills.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Required skill names must be non-empty strings.")
+        if (
+            not isinstance(required_rating, int)
+            or isinstance(required_rating, bool)
+            or required_rating < 0
+        ):
+            raise ValueError("Required skill ratings must be non-negative integers.")
+        applicant_rating = applicant_ratings.get(name.strip().casefold())
+        comparisons.append({
+            "name": name.strip(),
+            "applicant_rating": applicant_rating,
+            "required_rating": required_rating,
+            "met": (
+                applicant_rating is not None
+                and applicant_rating >= required_rating
+            ),
+        })
+    return comparisons
+
+
 def update_organizer_event(
     organizer_id: str, event_id: str, form: Mapping[str, Any]
 ) -> None:
@@ -353,6 +430,9 @@ def get_event_applicants(organizer_id: str, event_id: str) -> dict[str, Any]:
     users = load(USERS_FILE)
     if not isinstance(users, dict):
         raise ValueError("users.json must contain an object keyed by username.")
+    required_skills = event.get("required_skills", {})
+    if not isinstance(required_skills, Mapping):
+        raise ValueError(f"Event '{event_id}' must have required_skills as an object.")
 
     applicants = []
     for volunteer_id, application in event_applications.items():
@@ -388,6 +468,7 @@ def get_event_applicants(organizer_id: str, event_id: str) -> dict[str, Any]:
             "name": user.get("name") if isinstance(user.get("name"), str) else volunteer_id,
             "department": user.get("dept") if isinstance(user.get("dept"), str) else None,
             "skill_items": sorted(skill_items, key=lambda item: item[0].casefold()),
+            "skill_matches": compare_applicant_skills(skills, required_skills),
             "status": status,
             "role": role,
             "attended": attended,

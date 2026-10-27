@@ -11,10 +11,10 @@ from analytics_service import (
     render_contribution_chart,
 )
 from dashboard_service import (
+    dashboard_cards,
     get_event_applicants,
     create_organizer_event,
     get_organizer_event,
-    get_organizer_events,
     mark_attendance as mark_attendance_service,
     organizer_event_form_values,
     update_application_status,
@@ -73,10 +73,14 @@ def _applicants_modal(organizer_id: str, event_id: str, error=None, notice=None)
 def home():
     """List the signed-in organizer's events and application counts."""
     try:
-        events = get_organizer_events(g.current_user["username"])
+        cards = dashboard_cards(g.current_user["username"])
     except ValueError as error:
-        return render_template("dashboard.html", partial=False, events=[], error=str(error))
-    return render_template("dashboard.html", partial=False, events=events, error=None)
+        return render_template(
+            "dashboard.html", partial=False, dashboard_cards=[], error=str(error)
+        )
+    return render_template(
+        "dashboard.html", partial=False, dashboard_cards=cards, error=None
+    )
 
 
 @dashboard_bp.get("/events/<event_id>/contributions")
