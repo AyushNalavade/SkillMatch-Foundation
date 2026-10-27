@@ -102,9 +102,13 @@
         <p class="eyebrow">Organizer workspace</p>
         <h1 id="dashboard-title">Your events</h1>
         <p>Review applications, assign volunteer roles, and record attendance on event day.</p>
+        <p><a class="button button--primary" href="{{ url_for('dashboard.new_event') }}">Create event</a></p>
       </header>
 
       {% if error %}{{ toast(error, "error") }}{% endif %}
+      {% for category, message in get_flashed_messages(with_categories=true) %}
+        {{ toast(message, category) }}
+      {% endfor %}
 
       {% if events %}
         <div class="team-grid">
@@ -126,6 +130,10 @@
                 {{ item.pending_count }} pending · {{ item.accepted_count }} accepted ·
                 {{ item.rejected_count }} rejected
               </p>
+              <p><a class="button button--secondary"
+                    href="{{ url_for('dashboard.edit_event', event_id=item.event_id) }}">Edit event</a></p>
+              <p><a class="button button--secondary"
+                    href="{{ url_for('dashboard.contributions', event_id=item.event_id) }}">View Contributions</a></p>
               {% call modal("Review applicants") %}
                 {{ url_for("dashboard.applicants", event_id=item.event_id) }}
               {% endcall %}
