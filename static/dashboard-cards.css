@@ -1,0 +1,149 @@
+.dashboard-event-card {
+  padding: 1.15rem;
+}
+
+.dashboard-event-card__layout {
+  display: grid;
+  grid-template-columns: 5.25rem minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.dashboard-event-card__body {
+  min-width: 0;
+}
+
+.dashboard-event-card__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.dashboard-event-card__heading .eyebrow {
+  margin: 0 0 0.25rem;
+}
+
+.dashboard-event-card__heading h2 {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  line-height: 1.2;
+}
+
+.dashboard-event-card__status {
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.dashboard-event-card__seats {
+  margin: 0.9rem 0 0.55rem;
+  color: var(--navy);
+}
+
+.dashboard-applicant-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.dashboard-applicant-count {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgb(23 36 59 / 12%);
+  border-radius: 999px;
+  color: var(--navy);
+  background: var(--sand);
+  font-size: 0.82rem;
+}
+
+.dashboard-event-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.dashboard-event-card__actions p {
+  margin: 0;
+}
+
+.dashboard-skill-comparison {
+  margin: 0.75rem 0 1rem;
+}
+
+.dashboard-skill-comparison h4 {
+  margin: 0 0 0.5rem;
+  color: var(--navy);
+  font-size: 0.95rem;
+}
+
+.dashboard-skill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-skill-chip {
+  display: inline-flex;
+  min-height: 2.1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid rgb(23 36 59 / 20%);
+  border-radius: 999px;
+  color: var(--navy);
+  background: var(--sand);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.dashboard-skill-chip--met {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.dashboard-skill-chip--unmet {
+  border-style: dashed;
+}
+
+.dashboard-skill-chip__name,
+.dashboard-skill-chip__result {
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .dashboard-event-card {
+    padding: 0.9rem;
+  }
+
+  .dashboard-event-card__layout {
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+    gap: 0.7rem;
+  }
+
+  .dashboard-event-card__heading {
+    align-items: center;
+  }
+}
+
+@media (max-width: 360px) {
+  .dashboard-event-card {
+    padding: 0.75rem;
+  }
+
+  .dashboard-event-card__layout {
+    grid-template-columns: 3.75rem minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+}
