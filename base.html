@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#17243b">
     <title>{% block title %}SkillMatch{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block extra_css %}{% endblock %}
     {% block head_extra %}{% endblock %}
   </head>
   <body>
@@ -91,7 +92,6 @@
         </main>
         <footer class="site-footer">
           <span>SkillMatch</span>
-          <span>Shared campus volunteering foundation</span>
         </footer>
       </div>
     </div>
