@@ -1,0 +1,52 @@
+{% macro event_date_block(data) -%}
+  <div class="event-date-block"
+       aria-label="{% if data.day and data.month %}Event date {{ data.month }} {{ data.day }}{% else %}Event date to be announced{% endif %}">
+    {% if data.day and data.month %}
+      <span class="event-date-block__day">{{ data.day }}</span>
+      <span class="event-date-block__month">{{ data.month }}</span>
+    {% else %}
+      <span class="event-date-block__empty">Date<br>TBD</span>
+    {% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro event_skills_and_seats(data, show_ratings=false) -%}
+  <div class="event-card-data">
+    <div class="event-card-data__skills">
+      <h3>Skills</h3>
+      {% if data.skills %}
+        <ul class="event-skill-list">
+          {% for skill in data.skills %}
+            <li class="event-skill-chip {{ 'event-skill-chip--met' if skill.met else 'event-skill-chip--unmet' }}">
+              <span class="event-skill-chip__name">{{ skill.name }}</span>
+              {% if show_ratings %}
+                <span class="event-skill-chip__rating">
+                  You: {{ skill.student_rating if skill.student_rating is not none else "—" }},
+                  needs {{ skill.required_rating }}
+                </span>
+              {% else %}
+                <span class="event-skill-chip__rating">Needs {{ skill.required_rating }}</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="event-no-skills">No specific skills required.</p>
+      {% endif %}
+    </div>
+    <div class="event-card-data__seats">
+      <p class="event-seats-heading"><strong>Seats remaining:</strong> {{ data.seats_left if data.seats_left is not none else "—" }}</p>
+      <progress class="event-seats-bar"
+                max="100"
+                value="{{ data.seats_filled_percent }}"
+                aria-label="{{ data.seats_filled_percent }} percent of seats filled">
+        {{ data.seats_filled_percent }}%
+      </progress>
+      {% if data.total_seats is not none %}
+        <p>{{ data.total_seats - data.seats_left }} of {{ data.total_seats }} seats filled</p>
+      {% else %}
+        <p>Seat capacity not available</p>
+      {% endif %}
+    </div>
+  </div>
+{%- endmacro %}

@@ -3,14 +3,14 @@
 {% block title %}Verify a certificate · SkillMatch{% endblock %}
 
 {% block content %}
-  <section aria-labelledby="verify-title">
+  <section class="certificate-page certificate-verify" aria-labelledby="verify-title">
     <header class="section-heading">
       <p class="eyebrow">Public certificate check</p>
       <h1 id="verify-title">Verify a certificate</h1>
       <p>Enter the verification code shared by the certificate holder to confirm it is genuine.</p>
     </header>
 
-    <form method="post" action="{{ url_for('certificates.verify') }}">
+    <form class="certificate-verify-form" method="post" action="{{ url_for('certificates.verify') }}">
       <p>
         <label for="verification-code">Verification code</label><br>
         <input id="verification-code" name="verification_code" type="text"

@@ -7,7 +7,11 @@ from unittest.mock import patch
 
 import data_store
 from app import app
-from dashboard_service import organizer_event_form_values
+from dashboard_service import (
+    compare_applicant_skills,
+    dashboard_cards,
+    organizer_event_form_values,
+)
 
 
 class OrganizerEventManagementTests(unittest.TestCase):
@@ -165,6 +169,119 @@ class OrganizerEventManagementTests(unittest.TestCase):
         self.assertEqual(values["duration"], "2.5")
         response = self.client.get("/dashboard/events/e1/edit")
         self.assertIn(b'step="any"', response.data)
+
+    def test_dashboard_cards_format_event_summary_and_application_counts(self):
+        data_store.save("events.json", {
+            "e1": {
+                "name": "Campus Workshop",
+                "description": "A volunteering event.",
+                "organizer": "organizer",
+                "status": "open",
+                "date": "2030-03-10",
+                "slots_needed": 5,
+                "required_skills": {"Python": 2},
+            },
+            "e2": {
+                "name": "Undated Event",
+                "description": "Date to be announced.",
+                "organizer": "organizer",
+                "status": "completed",
+                "slots_needed": 3,
+                "required_skills": {"Python": 1},
+            },
+            "e3": {
+                "name": "Another Organizer's Event",
+                "organizer": "other_organizer",
+                "status": "open",
+                "date": "2030-03-11",
+                "slots_needed": 1,
+                "required_skills": {},
+            },
+        })
+        data_store.save("applications.json", {
+            "e1": {
+                "volunteer": {"status": "accepted"},
+                "pending_one": {"status": "pending"},
+                "pending_two": {"status": "pending"},
+                "rejected": {"status": "rejected"},
+            },
+            "e2": {},
+        })
+
+        cards = dashboard_cards("organizer")
+
+        self.assertEqual([card["event_id"] for card in cards], ["e1", "e2"])
+        self.assertEqual(
+            (cards[0]["day"], cards[0]["month"], cards[0]["status"]),
+            ("10", "Mar", "open"),
+        )
+        self.assertEqual(cards[0]["seats_filled"], 1)
+        self.assertEqual(
+            [item["count"] for item in cards[0]["applicant_counts"]],
+            [2, 1, 1],
+        )
+        self.assertEqual((cards[1]["day"], cards[1]["month"]), ("", ""))
+        self.assertEqual(cards[1]["status"], "completed")
+        self.assertEqual(cards[1]["seats_filled"], 0)
+
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"event-cards.css", response.data)
+        self.assertIn(b"dashboard-cards.css", response.data)
+        self.assertIn(b"event-date-block__day", response.data)
+        self.assertIn(b"status-pill dashboard-event-card__status", response.data)
+        self.assertIn(b"Pending", response.data)
+        self.assertIn(b"Mar", response.data)
+
+    def test_applicant_skill_comparison_is_case_insensitive(self):
+        matches = compare_applicant_skills(
+            {"pYtHoN": 4, "Design": 1},
+            {"Python": 3, "design": 2, "Planning": 0},
+        )
+
+        self.assertEqual(
+            matches,
+            [
+                {
+                    "name": "Python",
+                    "applicant_rating": 4,
+                    "required_rating": 3,
+                    "met": True,
+                },
+                {
+                    "name": "design",
+                    "applicant_rating": 1,
+                    "required_rating": 2,
+                    "met": False,
+                },
+                {
+                    "name": "Planning",
+                    "applicant_rating": None,
+                    "required_rating": 0,
+                    "met": False,
+                },
+            ],
+        )
+
+    def test_applicant_modal_renders_skill_match_chips(self):
+        self.client.post("/dashboard/events/new", data=self.form())
+        data_store.save("applications.json", {
+            "e1": {"volunteer": {"status": "pending"}}
+        })
+        users = data_store.load("users.json")
+        users["volunteer"]["skills"] = {"pYtHoN": 2}
+        data_store.save("users.json", users)
+        events = data_store.load("events.json")
+        events["e1"]["required_skills"] = {"Python": 2, "Design": 1}
+        data_store.save("events.json", events)
+
+        response = self.client.get("/dashboard/events/e1/applicants")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"dashboard-skill-chip--met", response.data)
+        self.assertIn(b"dashboard-skill-chip--unmet", response.data)
+        self.assertIn(b"Applicant: 2", response.data)
+        self.assertIn(b"Not met", response.data)
 
     def test_invalid_durations_are_rejected_without_saving(self):
         for duration in ("0", "-0.5", "nan", "inf", "not-a-number"):

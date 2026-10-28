@@ -2,19 +2,25 @@
 
 from functools import wraps
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, redirect, render_template, request, send_file, url_for
 
 from auth_routes import _login_required, _require_csrf
+from analytics_service import (
+    get_event_contributions,
+    render_attendance_chart,
+    render_contribution_chart,
+)
 from dashboard_service import (
+    dashboard_cards,
     get_event_applicants,
     create_organizer_event,
     get_organizer_event,
-    get_organizer_events,
     mark_attendance as mark_attendance_service,
     organizer_event_form_values,
     update_application_status,
     update_organizer_event,
 )
+from io import BytesIO
 
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
@@ -33,6 +39,18 @@ def _organizer_required(view):
 
 def _is_htmx_request() -> bool:
     return request.headers.get("HX-Request", "").lower() == "true"
+
+
+def _owned_contribution_summary(event_id: str):
+    organizer_id = g.current_user["username"]
+    try:
+        event = get_organizer_event(organizer_id, event_id)
+        summary = get_event_contributions(event_id)
+    except KeyError:
+        abort(404)
+    if summary["event"].get("organizer") != organizer_id:
+        abort(404)
+    return event, summary
 
 
 def _applicants_modal(organizer_id: str, event_id: str, error=None, notice=None):
@@ -55,10 +73,52 @@ def _applicants_modal(organizer_id: str, event_id: str, error=None, notice=None)
 def home():
     """List the signed-in organizer's events and application counts."""
     try:
-        events = get_organizer_events(g.current_user["username"])
+        cards = dashboard_cards(g.current_user["username"])
     except ValueError as error:
-        return render_template("dashboard.html", partial=False, events=[], error=str(error))
-    return render_template("dashboard.html", partial=False, events=events, error=None)
+        return render_template(
+            "dashboard.html", partial=False, dashboard_cards=[], error=str(error)
+        )
+    return render_template(
+        "dashboard.html", partial=False, dashboard_cards=cards, error=None
+    )
+
+
+@dashboard_bp.get("/events/<event_id>/contributions")
+@_login_required
+@_organizer_required
+def contributions(event_id):
+    """Show contribution analytics only for an event owned by the organizer."""
+    event, summary = _owned_contribution_summary(event_id)
+    return render_template(
+        "contributions.html",
+        event_id=event_id,
+        event=event,
+        summary=summary,
+    )
+
+
+@dashboard_bp.get("/events/<event_id>/contributions/volunteers.png")
+@_login_required
+@_organizer_required
+def contribution_chart(event_id):
+    """Serve an owned event's contribution chart as an in-memory PNG."""
+    _event, summary = _owned_contribution_summary(event_id)
+    png = render_contribution_chart(summary)
+    if png is None:
+        abort(404)
+    return send_file(BytesIO(png), mimetype="image/png", download_name="contributions.png")
+
+
+@dashboard_bp.get("/events/<event_id>/contributions/attendance.png")
+@_login_required
+@_organizer_required
+def attendance_chart(event_id):
+    """Serve an owned event's attendance chart as an in-memory PNG."""
+    _event, summary = _owned_contribution_summary(event_id)
+    png = render_attendance_chart(summary)
+    if png is None:
+        abort(404)
+    return send_file(BytesIO(png), mimetype="image/png", download_name="attendance.png")
 
 
 def _render_event_form(mode, values, event_id=None, error=None, status=200):

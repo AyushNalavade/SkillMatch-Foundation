@@ -165,6 +165,73 @@ class EventTests(unittest.TestCase):
         self.assertIn("Closing Soon", events.get_badges(event, self.user))
         self.assertEqual(event, original)
 
+    def test_event_card_data_formats_date_seats_and_skill_match(self):
+        event = {
+            "date": "2030-01-09",
+            "slots_needed": 4,
+            "applications": {
+                "accepted": {"status": "accepted"},
+                "pending": {"status": "pending"},
+            },
+            "required_skills": {"Python": 3, "Design": 2},
+        }
+        student_skills = {"pYtHoN": 4, "design": 1}
+
+        data = events.event_card_data(event, student_skills)
+
+        self.assertEqual(data["day"], "09")
+        self.assertEqual(data["month"], "Jan")
+        self.assertEqual(data["seats_left"], 3)
+        self.assertEqual(data["seats_filled_percent"], 25)
+        self.assertEqual(data["skills"], [
+            {
+                "name": "Python",
+                "student_rating": 4,
+                "required_rating": 3,
+                "met": True,
+            },
+            {
+                "name": "Design",
+                "student_rating": 1,
+                "required_rating": 2,
+                "met": False,
+            },
+        ])
+
+    def test_event_card_data_leaves_missing_date_empty(self):
+        data = events.event_card_data(
+            {"required_skills": {}, "slots_needed": 2},
+            self.user["skills"],
+        )
+        self.assertEqual(data["day"], "")
+        self.assertEqual(data["month"], "")
+        self.assertEqual(data["seats_left"], 2)
+        self.assertEqual(data["seats_filled_percent"], 0)
+
+    def test_discover_and_detail_show_volunteer_skill_ratings(self):
+        event_id = self.create(required_skills={"pYtHoN": 2})
+
+        for response in (
+            self.client.get("/events/discover"),
+            self.client.get(f"/events/{event_id}"),
+        ):
+            self.assertEqual(response.status_code, 200)
+            compact_html = b" ".join(response.data.split())
+            self.assertIn(b"You: 3, needs 2", compact_html)
+            self.assertIn(b"event-skill-chip--met", compact_html)
+            self.assertIn(b"event-cards.css", response.data)
+
+        unmet_id = self.create(required_skills={"Python": 4})
+        unmet_detail = self.client.get(f"/events/{unmet_id}")
+        self.assertIn(b"event-skill-chip--unmet", unmet_detail.data)
+        self.assertIn(b"You: 3, needs 4", b" ".join(unmet_detail.data.split()))
+
+    def test_event_card_stylesheet_is_served(self):
+        with self.client.get("/static/event-cards.css") as response:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"var(--sand)", response.data)
+            self.assertIn(b"var(--navy)", response.data)
+
     def test_card_counts_only_accepted_applications(self):
         event_id = self.create()
         data_store.save("applications.json", {event_id: {

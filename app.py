@@ -9,6 +9,7 @@ from certificate_routes import certificates_bp
 from dashboard_routes import dashboard_bp
 from event_routes import events_bp
 from formatting import format_decimal
+from notification_routes import notifications_bp
 
 
 app = Flask(__name__)
@@ -17,12 +18,23 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(certificates_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(events_bp)
+app.register_blueprint(notifications_bp)
+
+
+def home_steps() -> list[dict[str, str]]:
+    """Return the four public steps shown on the home page."""
+    return [
+        {"number": "01", "title": "Find an event that fits your skills"},
+        {"number": "02", "title": "Apply in one click"},
+        {"number": "03", "title": "Get accepted by the organizer"},
+        {"number": "04", "title": "Earn a certificate anyone can verify"},
+    ]
 
 
 @app.get("/")
 def home():
     """Show the shared foundation landing page."""
-    return render_template("index.html")
+    return render_template("index.html", steps=home_steps())
 
 
 # Teammate 1 — Accounts and profiles: import and register the accounts Blueprint here.

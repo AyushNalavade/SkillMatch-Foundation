@@ -11,6 +11,7 @@ from event_service import (
     EVENTS_FILE,
     _as_utc_datetime,
     apply_to_event,
+    event_card_data,
     find_eligible_events,
     get_apply_status,
     get_badges,
@@ -63,6 +64,12 @@ def discover():
             "event_id": event_id,
             "event": event,
             "seats_left": seats_left,
+            "card_data": event_card_data(
+                {**event, "seats_left": seats_left},
+                user.get("skills", {})
+                if user.get("role") == "Student Volunteer"
+                else {},
+            ),
             "badges": get_badges({**event, "seats_left": seats_left}, user),
             "is_saved": event_id in saved_event_ids,
             "eligibility_reason": get_event_eligibility_reason(user, event),
@@ -110,6 +117,12 @@ def _detail_context(event_id):
     return {
         "event_id": event_id,
         "event": event,
+        "card_data": event_card_data(
+            {**event, "seats_left": seats_left},
+            g.current_user.get("skills", {})
+            if g.current_user.get("role") == "Student Volunteer"
+            else {},
+        ),
         "duration_display": (
             event.get("duration_hours")
             if isinstance(event.get("duration_hours"), (int, float))
