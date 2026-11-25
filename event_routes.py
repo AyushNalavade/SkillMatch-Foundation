@@ -5,17 +5,16 @@ from datetime import datetime, timezone
 from flask import Blueprint, abort, g, redirect, render_template, request, url_for
 
 from auth_routes import _login_required, _require_csrf
+from auth_service import check_eligibility
 from data_store import load
 from event_service import (
     APPLICATIONS_FILE,
     EVENTS_FILE,
     _as_utc_datetime,
     apply_to_event,
-    event_card_data,
     find_eligible_events,
     get_apply_status,
     get_badges,
-    get_event_eligibility_reason,
     get_saved_event_ids,
     toggle_saved_event as toggle_saved_event_service,
 )
@@ -23,27 +22,11 @@ from event_service import (
 
 events_bp = Blueprint("events", __name__, url_prefix="/events")
 
-def _seats_left(event, event_applications):
-    """Count accepted applications consistently for cards and event details."""
-    if not isinstance(event_applications, dict) or any(
-        not isinstance(application, dict) for application in event_applications.values()
-    ):
-        raise ValueError("Event applications must contain application objects.")
-    capacity = event.get("slots_needed")
-    if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity <= 0:
-        raise ValueError("The event must have a positive slots_needed value.")
-    accepted_count = sum(
-        isinstance(application.get("status"), str)
-        and application["status"].casefold() == "accepted"
-        for application in event_applications.values()
-    )
-    return max(0, capacity - accepted_count)
-
 
 @events_bp.get("/discover")
 @_login_required
 def discover():
-    """Show open events to all signed-in users and return cards for HTMX requests."""
+    """Show eligible events and return only event cards for HTMX requests."""
     filters = {
         "search": request.args.get("search", "").strip(),
         "skill": request.args.get("skill", "").strip(),
@@ -54,26 +37,15 @@ def discover():
     user = g.current_user
     matches = find_eligible_events(user, **filters)
     saved_event_ids = set(get_saved_event_ids(user["username"]))
-    applications = load(APPLICATIONS_FILE)
-    if not isinstance(applications, dict):
-        raise ValueError("applications.json must contain an object keyed by event ID.")
-    event_cards = []
-    for event_id, event in matches:
-        seats_left = _seats_left(event, applications.get(event_id, {}))
-        event_cards.append({
+    event_cards = [
+        {
             "event_id": event_id,
             "event": event,
-            "seats_left": seats_left,
-            "card_data": event_card_data(
-                {**event, "seats_left": seats_left},
-                user.get("skills", {})
-                if user.get("role") == "Student Volunteer"
-                else {},
-            ),
-            "badges": get_badges({**event, "seats_left": seats_left}, user),
+            "badges": get_badges(event, user),
             "is_saved": event_id in saved_event_ids,
-            "eligibility_reason": get_event_eligibility_reason(user, event),
-        })
+        }
+        for event_id, event in matches
+    ]
 
     return render_template(
         "discover.html",
@@ -98,36 +70,38 @@ def _detail_context(event_id):
     if not isinstance(applications, dict):
         raise ValueError("applications.json must contain an object keyed by event ID.")
     event_applications = applications.get(event_id, {})
-    seats_left = _seats_left(event, event_applications)
+    if not isinstance(event_applications, dict) or any(
+        not isinstance(application, dict)
+        for application in event_applications.values()
+    ):
+        raise ValueError("Event applications must contain application objects.")
+    accepted_count = sum(
+        isinstance(application.get("status"), str)
+        and application["status"].casefold() == "accepted"
+        for application in event_applications.values()
+    )
+    capacity = event.get("slots_needed")
+    if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity <= 0:
+        raise ValueError("The event must have a positive slots_needed value.")
+    seats_left = max(0, capacity - accepted_count)
     status = get_apply_status(g.current_user["username"], event_id)
     ends_at = _as_utc_datetime(event.get("ends_at"))
     blocked_reason = None
     if status == "Apply":
-        if g.current_user.get("role") != "Student Volunteer":
-            blocked_reason = "Only student volunteers can apply."
-        elif event.get("status") != "open":
+        if event.get("status") != "open":
             blocked_reason = "This event is not open for applications."
         elif ends_at is not None and ends_at <= datetime.now(timezone.utc):
             blocked_reason = "This event has already ended."
         elif seats_left == 0:
             blocked_reason = "This event is full."
-        else:
-            blocked_reason = get_event_eligibility_reason(g.current_user, event)
+        elif not check_eligibility(
+            g.current_user.get("skills", {}), event.get("required_skills", {})
+        ):
+            blocked_reason = "Your skills do not meet this event's requirements."
 
     return {
         "event_id": event_id,
         "event": event,
-        "card_data": event_card_data(
-            {**event, "seats_left": seats_left},
-            g.current_user.get("skills", {})
-            if g.current_user.get("role") == "Student Volunteer"
-            else {},
-        ),
-        "duration_display": (
-            event.get("duration_hours")
-            if isinstance(event.get("duration_hours"), (int, float))
-            else None
-        ),
         "seats_left": seats_left,
         "badges": get_badges({**event, "seats_left": seats_left}, g.current_user),
         "apply_status": status,
