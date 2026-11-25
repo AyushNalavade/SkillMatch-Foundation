@@ -1,0 +1,397 @@
+.prism-heading {
+  margin-bottom: 1.25rem;
+}
+
+.prism-heading h1,
+.prism-form-card h1,
+.prism-form-card h2,
+.prism-chart h2,
+.prism-chart h3,
+.prism-event-facts h2,
+.prism-profile-card h2 {
+  color: var(--navy);
+  font-family: var(--font-display);
+}
+
+.prism-event-facts,
+.prism-form-card,
+.prism-chart,
+.prism-profile-card {
+  margin-block: 1rem;
+}
+
+.prism-event-facts {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.5rem 1.5rem;
+  align-content: center;
+}
+
+.prism-event-facts p {
+  margin: 0;
+}
+
+.prism-stats,
+.prism-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  margin-block: 1.5rem;
+}
+
+.prism-stats > .page-heading {
+  grid-column: 1 / -1;
+}
+
+.prism-summary-grid .team-card {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.prism-total {
+  color: var(--navy);
+  font-family: var(--font-display);
+  font-size: 2rem;
+}
+
+.prism-bar-list {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prism-bar-list li {
+  display: grid;
+  grid-template-columns: minmax(6rem, 1fr) minmax(5rem, 2fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.prism-bar-label {
+  overflow-wrap: anywhere;
+}
+
+.prism-bar-track {
+  display: block;
+  height: 0.75rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--sand);
+}
+
+.prism-bar {
+  display: block;
+  height: 100%;
+  min-width: 0.2rem;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.prism-progress {
+  width: 100%;
+  height: 0.75rem;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  color: var(--accent);
+  background: var(--sand);
+  accent-color: var(--accent);
+}
+
+.prism-progress::-webkit-progress-bar {
+  background: var(--sand);
+  border-radius: 999px;
+}
+
+.prism-progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.prism-progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.prism-form-card {
+  max-width: 54rem;
+  padding: clamp(1rem, 4vw, 2rem);
+}
+
+.prism-form-card form > p,
+.prism-filter-form > p {
+  display: grid;
+  gap: 0.4rem;
+  margin-block: 0.8rem;
+}
+
+.prism-form-card input:not([type="checkbox"]),
+.prism-form-card textarea,
+.prism-form-card select,
+.prism-filter-form input,
+.prism-filter-form select,
+.prism-hours-form input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgb(23 36 59 / 25%);
+  border-radius: 0.55rem;
+  color: var(--navy);
+  background: #fffefa;
+  font: inherit;
+}
+
+.prism-checkbox {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.prism-checkbox input {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.prism-filter-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.prism-roster-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 1.25rem;
+}
+
+.prism-roster-summary p {
+  display: grid;
+  min-width: min(100%, 12rem);
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-left: 3px solid var(--accent);
+  color: var(--ink-soft);
+  background: rgb(212 180 131 / 12%);
+}
+
+.prism-roster-summary strong {
+  color: var(--navy);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.prism-filter-count {
+  margin-block: 1.1rem 0.65rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.prism-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid rgb(23 36 59 / 14%);
+  border-radius: 0.75rem;
+}
+
+.prism-table {
+  width: 100%;
+  min-width: 65rem;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.prism-table th,
+.prism-table td {
+  padding: 0.7rem;
+  border-bottom: 1px solid rgb(23 36 59 / 12%);
+  text-align: left;
+  vertical-align: top;
+}
+
+.prism-table th {
+  color: var(--navy);
+  background: var(--sand);
+}
+
+.prism-table td {
+  overflow-wrap: anywhere;
+}
+
+.prism-secondary-value {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.prism-action-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.prism-account-state {
+  display: inline-flex;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  color: var(--navy);
+  background: var(--mint);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.prism-hours-form {
+  display: grid;
+  min-width: 7rem;
+  gap: 0.35rem;
+}
+
+.prism-tag {
+  display: inline-flex;
+  margin: 0.15rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  color: var(--navy);
+  background: var(--sand);
+  font-size: 0.78rem;
+}
+
+.prism-review-flag {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  color: var(--navy);
+  background: var(--accent);
+  font-weight: 700;
+}
+
+.prism-valid {
+  color: #146041;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.prism-details {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.5fr) 1fr;
+  gap: 0.7rem;
+}
+
+.prism-details dt {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.prism-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.prism-public-names {
+  margin-block: 1rem;
+}
+
+.prism-signout {
+  margin-block: 1.5rem;
+}
+
+@media (max-width: 600px) {
+  .prism-bar-list li {
+    grid-template-columns: minmax(5rem, 1fr) minmax(4rem, 1.2fr) auto;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+  }
+
+  .prism-details {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .prism-details dd {
+    margin-bottom: 0.55rem;
+  }
+
+  .prism-filter-form > p {
+    margin-block: 0.3rem;
+  }
+
+  .prism-table-wrap {
+    overflow: visible;
+    border: 0;
+  }
+
+  .prism-table {
+    display: block;
+    min-width: 0;
+    font-size: 0.9rem;
+  }
+
+  .prism-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+
+  .prism-table tbody {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .prism-table tr {
+    display: grid;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid rgb(23 36 59 / 14%);
+    border-radius: 0.75rem;
+    background: var(--surface);
+  }
+
+  .prism-table td {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 0.75fr) minmax(0, 1.5fr);
+    gap: 0.55rem;
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid rgb(23 36 59 / 10%);
+    text-align: left;
+  }
+
+  .prism-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .prism-table td::before {
+    color: var(--navy);
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1.4;
+    content: attr(data-label);
+  }
+
+  .prism-hours-form {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .prism-hours-form input {
+    min-width: 0;
+  }
+
+  .prism-filter-form > a {
+    justify-self: start;
+  }
+}
