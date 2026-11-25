@@ -6,7 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 import secrets
 
-from data_store import load, save
+from data_store import edit_documents, load, save
 
 
 NOTIFICATIONS_FILE = "notifications.json"
@@ -99,6 +99,57 @@ def add_notifications(
         document[username] = entries
     save(NOTIFICATIONS_FILE, document)
     return len(usernames)
+
+
+def add_individual_notifications(
+    messages: list[tuple[str, str]] | tuple[tuple[str, str], ...],
+    *,
+    kind: str,
+    title: str,
+    event_id: str,
+) -> int:
+    """Persist personalized notices for multiple users in one document update."""
+    if not isinstance(messages, (list, tuple)):
+        raise ValueError("Personalized notifications must be a list or tuple.")
+    if kind not in ALLOWED_KINDS:
+        raise ValueError("Notification kind is not supported.")
+    safe_title = _required_text(title, "title", 120)
+    safe_event_id = _required_text(event_id, "event_id", 120)
+
+    cleaned_messages = []
+    seen = set()
+    for item in messages:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError("Each personalized notification needs a user and message.")
+        username = _required_text(item[0], "recipient", 120)
+        message = _required_text(item[1], "message", 500)
+        if username in seen:
+            raise ValueError("A user can receive only one notice in this batch.")
+        seen.add(username)
+        cleaned_messages.append((username, message))
+    if not cleaned_messages:
+        return 0
+
+    created_at = datetime.now(timezone.utc).isoformat()
+    with edit_documents(NOTIFICATIONS_FILE) as documents:
+        document = documents[NOTIFICATIONS_FILE]
+        if not isinstance(document, dict):
+            raise ValueError(
+                "notifications.json must contain an object keyed by username."
+            )
+        for username, message in cleaned_messages:
+            entries = _user_entries(document, username)
+            entries.append({
+                "id": secrets.token_urlsafe(12),
+                "kind": kind,
+                "title": safe_title,
+                "message": message,
+                "event_id": safe_event_id,
+                "created_at": created_at,
+                "is_read": False,
+            })
+            document[username] = entries
+    return len(cleaned_messages)
 
 
 def get_user_notifications(username: str) -> list[dict[str, Any]]:
