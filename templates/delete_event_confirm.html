@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "macros.html" import toast %}
+
+{% block title %}Delete event · SkillMatch{% endblock %}
+
+{% block content %}
+  <section class="not-found-panel" aria-labelledby="delete-event-title">
+    <p class="eyebrow">Organizer action</p>
+    <h1 id="delete-event-title">Hide this event?</h1>
+    <p><strong>{{ event.name }}</strong> will be removed from event discovery and your active dashboard.</p>
+    <p>Applications, certificates, and the event record will be kept for history. You can’t restore it from this page.</p>
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+      {{ toast(message, category) }}
+    {% endfor %}
+    <form method="post" action="{{ url_for('dashboard.delete_event', event_id=event_id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="button button--primary" type="submit">Confirm and hide event</button>
+      <a class="button button--secondary" href="{{ url_for('dashboard.home') }}">Cancel</a>
+    </form>
+  </section>
+{% endblock %}
