@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "macros.html" import toast, empty_state %}
+{% block title %}PrismLabs event management · SkillMatch{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='prismlabs.css') }}">{% endblock %}
+{% block content %}
+<section class="page-heading prism-heading">
+  <p class="eyebrow">Organizer workspace</p><h1>PrismLabs event management</h1>
+  <p>Private roster management and event records.</p>
+</section>
+{% for category, message in get_flashed_messages(with_categories=true) %}{{ toast(message, category) }}{% endfor %}
+<section class="prism-summary-grid" aria-label="Event totals">
+  <article class="team-card"><strong class="prism-total">{{ stats.total }}</strong><span>Volunteers</span></article>
+  <article class="team-card"><strong class="prism-total">{{ stats.review_count }}</strong><span>Records to review</span></article>
+  <article class="team-card"><strong class="prism-total">{{ certificate_count }}</strong><span>Certificates</span></article>
+</section>
+<section class="team-card prism-form-card">
+  <h2>Edit completed event</h2>
+  <p>Event date is optional. Leave it blank to show “Date: Not recorded”. Registration dates come from the CSV and are separate.</p>
+  <form method="post" action="{{ url_for('prismlabs.edit_event', event_id=event_id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p><label for="event-name">Event name</label><input id="event-name" name="name" required maxlength="120" value="{{ event.name }}"></p>
+    <p><label for="event-date">Event date (optional)</label><input id="event-date" name="date" type="date" value="{{ event.date or '' }}"></p>
+    <p><label for="event-venue">Venue</label><input id="event-venue" name="venue" required maxlength="160" value="{{ event.venue }}"></p>
+    <p><label for="event-image-url">Event image URL (optional)</label><input id="event-image-url" name="image_url" type="url" inputmode="url" pattern="https://.*" placeholder="https://example.org/event-image.jpg" value="{{ event.get('image_url') or '' }}" aria-describedby="event-image-help"><small id="event-image-help">Use an HTTPS image URL. No image is added unless you provide one.</small></p>
+    <p><label for="event-description">Description</label><textarea id="event-description" name="description" required maxlength="500" rows="3">{{ event.description }}</textarea></p>
+    <label class="prism-checkbox"><input type="checkbox" name="show_names_publicly" {% if event.show_names_publicly %}checked{% endif %}> Show volunteer names on the public event page</label>
+    <p><strong>Volunteer registration period:</strong> {{ registration_label }}</p>
+    <button class="button button--primary" type="submit">Save event details</button>
+  </form>
+</section>
+<section class="team-card prism-admin-links">
+  <h2>Roster and certificates</h2>
+  <p><a class="button button--secondary" href="{{ url_for('prismlabs.admin_volunteers', event_id=event_id) }}">Search volunteers and review records</a></p>
+  <p><a class="button button--secondary" href="{{ url_for('prismlabs.download_all_certificates', event_id=event_id) }}">Download all certificates as ZIP</a></p>
+</section>
+<section class="prism-stats" aria-label="Aggregate volunteer charts">
+{% for heading, values in [("Academic year", stats.years), ("Department", stats.departments), ("Interested area", stats.areas)] %}
+  <article class="team-card prism-chart"><h2>{{ heading }}</h2>
+    <ul class="prism-bar-list">
+      {% for label, count in values.items() %}
+        <li><span class="prism-bar-label">{{ label }}</span>
+          <progress class="prism-progress" max="{{ stats.total or 1 }}" value="{{ count }}"
+                    aria-label="{{ count }} volunteers">{{ count }}</progress>
+          <strong>{{ count }}</strong></li>
+      {% endfor %}
+    </ul>
+  </article>
+{% endfor %}
+</section>
+{% endblock %}
