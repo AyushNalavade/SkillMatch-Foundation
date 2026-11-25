@@ -2,9 +2,7 @@
 
 from collections.abc import Mapping
 from datetime import date, datetime, timezone
-from io import BytesIO
 import math
-from pathlib import Path
 import re
 import secrets
 import string
@@ -30,13 +28,6 @@ EVENTS_FILE = "events.json"
 APPLICATIONS_FILE = "applications.json"
 USERS_FILE = "users.json"
 CERTIFICATES_FILE = "certificates.json"
-CERTIFICATE_FONT_FILES = {
-    "DM-Sans": Path(__file__).resolve().parent / "static" / "fonts" / "dm-sans" / "DM-Sans-Regular.ttf",
-    "DM-Sans-Bold": Path(__file__).resolve().parent / "static" / "fonts" / "dm-sans" / "DM-Sans-Bold.ttf",
-    "Fraunces-SemiBold": Path(__file__).resolve().parent / "static" / "fonts" / "fraunces" / "Fraunces-SemiBold.ttf",
-    "Fraunces-Bold": Path(__file__).resolve().parent / "static" / "fonts" / "fraunces" / "Fraunces-Bold.ttf",
-}
-_CERTIFICATE_FONTS_REGISTERED = False
 
 
 def _load_object(filename: str, description: str) -> dict[str, Any]:
@@ -46,18 +37,11 @@ def _load_object(filename: str, description: str) -> dict[str, Any]:
     return data
 
 
-def _register_certificate_fonts() -> None:
-    """Register the local static instances of the site's DM Sans and Fraunces fonts."""
-    global _CERTIFICATE_FONTS_REGISTERED
-    if _CERTIFICATE_FONTS_REGISTERED:
-        return
-    registered_fonts = set(pdfmetrics.getRegisteredFontNames())
-    for font_name, font_path in CERTIFICATE_FONT_FILES.items():
-        if not font_path.is_file():
-            raise FileNotFoundError(f"Required certificate font is missing: {font_path}")
-        if font_name not in registered_fonts:
-            pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
-    _CERTIFICATE_FONTS_REGISTERED = True
+def _safe_pdf_text(value: Any) -> str:
+    """Make user-provided text safe for a basic Helvetica PDF content stream."""
+    text = " ".join(str(value).split())
+    text = text.encode("cp1252", errors="replace").decode("cp1252")
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
 def _parse_certificate_date(value: Any) -> date | None:
@@ -90,51 +74,6 @@ def _format_certificate_date(value: Any) -> str | None:
     return parsed.strftime("%B %d, %Y").replace(" 0", " ")
 
 
-def _jpeg_dimensions(data: bytes) -> tuple[int, int]:
-    """Read width and height from a JPEG frame header."""
-    if not data.startswith(b"\xff\xd8"):
-        raise ValueError("The campus dome asset is not a JPEG image.")
-    frame_markers = {
-        0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
-        0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
-    }
-    offset = 2
-    while offset + 4 <= len(data):
-        if data[offset] != 0xFF:
-            offset += 1
-            continue
-        while offset < len(data) and data[offset] == 0xFF:
-            offset += 1
-        if offset >= len(data):
-            break
-        marker = data[offset]
-        offset += 1
-        if marker in (0xD8, 0xD9, 0x01) or 0xD0 <= marker <= 0xD7:
-            continue
-        if offset + 2 > len(data):
-            break
-        segment_length = int.from_bytes(data[offset:offset + 2], "big")
-        if segment_length < 2 or offset + segment_length > len(data):
-            break
-        if marker in frame_markers:
-            if segment_length < 7:
-                break
-            height = int.from_bytes(data[offset + 3:offset + 5], "big")
-            width = int.from_bytes(data[offset + 5:offset + 7], "big")
-            if width > 0 and height > 0:
-                return width, height
-            break
-        offset += segment_length
-    raise ValueError("Could not read the campus dome image dimensions.")
-
-
-def _read_dome_image() -> tuple[bytes, int, int]:
-    image_path = Path(__file__).resolve().parent / "static" / "images" / "mitwpu-dome.jpeg"
-    image_data = image_path.read_bytes()
-    width, height = _jpeg_dimensions(image_data)
-    return image_data, width, height
-
-
 def _event_date_value(event: Mapping[str, Any]) -> str | None:
     """Use the canonical event date first, then supported legacy scheduling fields."""
     for field in ("date", "event_date", "starts_at", "start_at", "start_date"):
@@ -151,41 +90,37 @@ def _normalize_verification_code(value: Any) -> str | None:
     return normalized if re.fullmatch(r"[A-Z0-9]{10}", normalized) else None
 
 
-def _estimated_text_width(
-    text: str,
-    font_size: int,
-    bold: bool = False,
-    font_name: str | None = None,
-) -> float:
-    """Measure text using the registered font that will be embedded in the PDF."""
-    _register_certificate_fonts()
-    selected_font = font_name or (
-        "Fraunces-Bold" if bold else "Fraunces-SemiBold"
-    )
-    return pdfmetrics.stringWidth(" ".join(str(text).split()), selected_font, font_size)
+def _estimated_text_width(text: str, font_size: int, bold: bool = False) -> float:
+    """Conservatively estimate Helvetica text width for line wrapping and centering."""
+    width = 0.0
+    for character in text:
+        if character in " ilI.,:;!|'`":
+            factor = 0.29
+        elif character in "MW@%&":
+            factor = 0.86
+        elif character in "frt()[]":
+            factor = 0.36
+        elif character.isupper():
+            factor = 0.66
+        else:
+            factor = 0.54
+        width += factor * font_size * (1.05 if bold else 1)
+    return width
 
 
-def _wrap_pdf_text(
-    text: Any,
-    max_width: float,
-    font_size: int,
-    bold: bool,
-    font_name: str | None = None,
-) -> list[str]:
+def _wrap_pdf_text(text: Any, max_width: float, font_size: int, bold: bool) -> list[str]:
     normalized = " ".join(str(text).split())
     if not normalized:
         return [""]
 
     tokens: list[str] = []
     for word in normalized.split(" "):
-        if _estimated_text_width(word, font_size, bold, font_name) <= max_width:
+        if _estimated_text_width(word, font_size, bold) <= max_width:
             tokens.append(word)
             continue
         chunk = ""
         for character in word:
-            if chunk and _estimated_text_width(
-                chunk + character, font_size, bold, font_name
-            ) > max_width:
+            if chunk and _estimated_text_width(chunk + character, font_size, bold) > max_width:
                 tokens.append(chunk)
                 chunk = character
             else:
@@ -197,9 +132,7 @@ def _wrap_pdf_text(
     current = ""
     for token in tokens:
         candidate = f"{current} {token}".strip()
-        if current and _estimated_text_width(
-            candidate, font_size, bold, font_name
-        ) > max_width:
+        if current and _estimated_text_width(candidate, font_size, bold) > max_width:
             lines.append(current)
             current = token
         else:
@@ -216,50 +149,41 @@ def _fit_pdf_text(
     minimum_size: int,
     max_lines: int,
     bold: bool = False,
-    font_name: str | None = None,
 ) -> tuple[list[str], int]:
     for font_size in range(preferred_size, minimum_size - 1, -1):
-        lines = _wrap_pdf_text(text, max_width, font_size, bold, font_name)
+        lines = _wrap_pdf_text(text, max_width, font_size, bold)
         if len(lines) <= max_lines:
             return lines, font_size
 
     font_size = minimum_size
-    lines = _wrap_pdf_text(text, max_width, font_size, bold, font_name)[:max_lines]
+    lines = _wrap_pdf_text(text, max_width, font_size, bold)[:max_lines]
     if lines:
         suffix = "..."
         last_line = lines[-1]
-        while last_line and _estimated_text_width(
-            last_line + suffix, font_size, bold, font_name
-        ) > max_width:
+        while last_line and _estimated_text_width(last_line + suffix, font_size, bold) > max_width:
             last_line = last_line[:-1].rstrip()
         lines[-1] = last_line + suffix
     return lines, font_size
 
 
-def _draw_certificate_text(
-    canvas: Canvas,
+def _pdf_text_command(
     text: Any,
     x: float,
     y: float,
     font_size: int,
-    font_name: str,
-    color: Color,
-) -> None:
+    font: str,
+    color: tuple[float, float, float],
+    centered: bool = False,
+) -> str:
     normalized = " ".join(str(text).split())
-    canvas.setFillColor(color)
-    canvas.setFont(font_name, font_size)
-    canvas.drawCentredString(x, y, normalized)
-
-
-def _volunteer_display_name(value: Any) -> str:
-    """Use the requested Title Case presentation without changing stored profile data."""
-    return " ".join(str(value).split()).title()
-
-
-def _event_display_name(value: Any) -> str:
-    """Title-case event names only when every cased character was entered lowercase."""
-    normalized = " ".join(str(value).split())
-    return normalized.title() if normalized.islower() else normalized
+    if centered:
+        x -= _estimated_text_width(normalized, font_size, font == "F2") / 2
+    red, green, blue = color
+    return (
+        f"{red:.3f} {green:.3f} {blue:.3f} rg "
+        f"BT /{font} {font_size} Tf 1 0 0 1 {x:.2f} {y:.2f} Tm "
+        f"({_safe_pdf_text(normalized)}) Tj ET"
+    )
 
 
 def _draw_theme_emblem(pdf: Canvas, theme: Mapping[str, Any]) -> None:
@@ -416,69 +340,25 @@ def _render_certificate_pdf(
         pdf, "PRESENTED TO", 581, 438, 8, "DM-Sans-Bold", navy,
     )
 
-    volunteer_name = _volunteer_display_name(volunteer_name)
-    event_name = _event_display_name(event_name)
-    text_center = 581
-    text_width = 346
     name_lines, name_size = _fit_pdf_text(
-        volunteer_name,
-        text_width,
-        preferred_size=25,
-        minimum_size=17,
-        max_lines=2,
-        bold=True,
-        font_name="Fraunces-Bold",
+        volunteer_name, 670, preferred_size=34, minimum_size=22, max_lines=3, bold=True,
     )
-    name_y = 411
+    name_y = 462
     for line in name_lines:
-        _draw_certificate_text(
-            pdf, line, text_center, name_y, name_size, "Fraunces-Bold", navy,
-        )
+        commands.append(_pdf_text_command(line, 396, name_y, name_size, "F2", ink, centered=True))
         name_y -= name_size + 3
 
-    event_label_y = 411 - len(name_lines) * (name_size + 3) - 6
-    _draw_certificate_text(
-        pdf, "FOR PARTICIPATION IN", text_center, event_label_y, 8, "DM-Sans-Bold", navy,
-    )
+    event_label_y = name_y - 10
+    commands.append(_pdf_text_command(
+        "FOR PARTICIPATION IN", 396, event_label_y, 10, "F2", muted_green, centered=True,
+    ))
     event_lines, event_size = _fit_pdf_text(
-        event_name,
-        text_width,
-        preferred_size=18,
-        minimum_size=13,
-        max_lines=2,
-        bold=True,
-        font_name="Fraunces-Bold",
+        event_name, 670, preferred_size=20, minimum_size=13, max_lines=3, bold=True,
     )
-    event_y = event_label_y - 24
+    event_y = event_label_y - 28
     for line in event_lines:
-        _draw_certificate_text(
-            pdf, line, text_center, event_y, event_size, "Fraunces-Bold", navy,
-        )
-        event_y -= event_size + 3
-
-    details_y = event_y - 10
-    normalized_role = (
-        " ".join(volunteer_role.split())
-        if isinstance(volunteer_role, str) and volunteer_role.strip()
-        else None
-    )
-    if normalized_role:
-        role_lines, role_size = _fit_pdf_text(
-            f"as {normalized_role}",
-            text_width,
-            preferred_size=10,
-            minimum_size=8,
-            max_lines=1,
-            bold=True,
-            font_name="DM-Sans-Bold",
-        )
-        role_y = event_y - 3
-        for line in role_lines:
-            _draw_certificate_text(
-                pdf, line, text_center, role_y, role_size, "DM-Sans-Bold", navy,
-            )
-            role_y -= role_size + 2
-        details_y = role_y - 10
+        commands.append(_pdf_text_command(line, 396, event_y, event_size, "F2", ink, centered=True))
+        event_y -= event_size + 2
 
     event_date_text = _format_certificate_date(event_date)
     issue_date_text = _format_certificate_date(issue_date) or "Not recorded"
@@ -562,64 +442,7 @@ def _render_certificate_pdf(
         "DM-Sans",
         muted_ink,
     )
-    pdf.showPage()
-    pdf.save()
-    return buffer.getvalue()
-
-
-def _certificate_display_details(
-    record: Mapping[str, Any],
-) -> tuple[str | None, str | None]:
-    """Resolve role and organizer name for both new and legacy certificate records."""
-    role = record.get("volunteer_role")
-    if not isinstance(role, str) or not role.strip():
-        role = None
-    organizer_name = record.get("organizer_name")
-    if not isinstance(organizer_name, str) or not organizer_name.strip():
-        organizer_name = None
-
-    event_id = record.get("event_id")
-    username = record.get("username")
-    if (
-        "volunteer_role" not in record
-        and isinstance(event_id, str)
-        and isinstance(username, str)
-    ):
-        applications = load(APPLICATIONS_FILE)
-        event_applications = (
-            applications.get(event_id, {})
-            if isinstance(applications, Mapping)
-            else {}
-        )
-        application = (
-            event_applications.get(username, {})
-            if isinstance(event_applications, Mapping)
-            else {}
-        )
-        candidate = application.get("role") if isinstance(application, Mapping) else None
-        role = candidate.strip() if isinstance(candidate, str) and candidate.strip() else None
-
-    if (
-        organizer_name is None
-        and isinstance(event_id, str)
-    ):
-        events = load(EVENTS_FILE)
-        event = events.get(event_id, {}) if isinstance(events, Mapping) else {}
-        organizer_id = event.get("organizer") if isinstance(event, Mapping) else None
-        if isinstance(organizer_id, str) and organizer_id.strip():
-            users = load(USERS_FILE)
-            organizer = users.get(organizer_id) if isinstance(users, Mapping) else None
-            candidate = (
-                organizer.get("name")
-                if isinstance(organizer, Mapping)
-                else None
-            )
-            organizer_name = (
-                candidate.strip()
-                if isinstance(candidate, str) and candidate.strip()
-                else organizer_id
-            )
-    return role, organizer_name
+    return bytes(pdf)
 
 
 def render_certificate_pdf(record: Mapping[str, Any]) -> bytes | None:
@@ -644,12 +467,12 @@ def render_certificate_pdf(record: Mapping[str, Any]) -> bytes | None:
     event_name = record.get("event_name")
     if not isinstance(event_name, str) or not event_name.strip():
         event_name = record.get("event_id", "Campus event")
-    volunteer_role, organizer_name = _certificate_display_details(record)
 
     return _render_certificate_pdf(
         str(volunteer_name),
         str(event_name),
         hours,
+        code,
         event_date=record.get("event_date"),
         issue_date=record.get("generated_at"),
         volunteer_role=volunteer_role,
@@ -708,23 +531,6 @@ def generate_certificate(
         if user.get("role") != "Student Volunteer":
             return False, "Certificates are issued only to student volunteers."
 
-        organizer_id = event.get("organizer")
-        organizer = users.get(organizer_id) if isinstance(organizer_id, str) else None
-        organizer_name = (
-            organizer.get("name")
-            if isinstance(organizer, Mapping)
-            and isinstance(organizer.get("name"), str)
-            and organizer.get("name").strip()
-            else organizer_id
-            if isinstance(organizer_id, str) and organizer_id.strip()
-            else "Event Organizer"
-        )
-        assigned_role = application.get("role")
-        volunteer_role = (
-            assigned_role.strip()
-            if isinstance(assigned_role, str) and assigned_role.strip()
-            else None
-        )
         event_date = _event_date_value(event)
         certificates = _load_object(CERTIFICATES_FILE, "keyed by verification code")
         record = _certificate_for(event_id, username)
@@ -740,8 +546,6 @@ def generate_certificate(
                 "event_name": event.get("name", event_id),
                 "event_date": event_date,
                 "volunteer_name": user.get("name", username),
-                "organizer_name": organizer_name,
-                "volunteer_role": volunteer_role,
                 "hours": application.get("hours", 0),
                 "notes": application.get("notes", ""),
                 "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -755,8 +559,6 @@ def generate_certificate(
         record.update({
             "event_name": event.get("name", event_id),
             "volunteer_name": user.get("name", username),
-            "organizer_name": organizer_name,
-            "volunteer_role": volunteer_role,
             "hours": application.get("hours", 0),
             "notes": application.get("notes", ""),
         })
@@ -808,15 +610,6 @@ def complete_event(
             event["completed_at"] = datetime.now(timezone.utc).isoformat()
             events[event_id] = event
             save(EVENTS_FILE, events)
-            organizer_id = event.get("organizer")
-            if isinstance(organizer_id, str) and organizer_id.strip():
-                add_notifications(
-                    [organizer_id],
-                    kind="event_ended",
-                    title="Event ended",
-                    message=f"{event.get('name', 'Your event')} has been marked complete.",
-                    event_id=event_id,
-                )
             return True, "Event completed. There were no accepted volunteers to certify."
         if set(contribution_updates) != set(accepted):
             return False, "Enter final hours and notes for every accepted volunteer."
@@ -855,22 +648,6 @@ def complete_event(
         events[event_id] = event
         save(APPLICATIONS_FILE, applications)
         save(EVENTS_FILE, events)
-        organizer_id = event.get("organizer")
-        if isinstance(organizer_id, str) and organizer_id.strip():
-            add_notifications(
-                [organizer_id],
-                kind="event_ended",
-                title="Event ended",
-                message=f"{event.get('name', 'Your event')} has been marked complete.",
-                event_id=event_id,
-            )
-        add_notifications(
-            list(accepted),
-            kind="event_ended",
-            title="Event ended",
-            message=f"{event.get('name', 'The event')} has ended. Thank you for volunteering.",
-            event_id=event_id,
-        )
 
         for username in accepted:
             success, result = generate_certificate(event_id, username)

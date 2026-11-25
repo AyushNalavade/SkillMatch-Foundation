@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#17243b">
+    <link rel="icon" href="data:,">
     <title>{% block title %}SkillMatch{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     {% block extra_css %}{% endblock %}
@@ -66,26 +67,6 @@
     </header>
 
     <div class="app-shell">
-      <aside class="sidebar" aria-label="SkillMatch workspace">
-        <p class="sidebar-label">Workspace</p>
-        {% set active_role = current_user.role if current_user is defined and current_user else none %}
-        {% if active_role == "Organizer" %}
-          <p class="sidebar-placeholder">Organizer workspace</p>
-          <a href="{{ url_for('dashboard.home') }}">Review applications</a>
-          <a href="{{ url_for('notifications.home') }}">Notifications{% if notification_unread_count %} ({{ notification_unread_count }}){% endif %}</a>
-          <a href="{{ url_for('certificates.home') }}">Complete events &amp; certificates</a>
-        {% elif active_role == "Student Volunteer" %}
-          <p class="sidebar-placeholder">Volunteer workspace</p>
-          <a href="{{ url_for('events.discover') }}">Find events</a>
-          <a href="{{ url_for('notifications.home') }}">Notifications{% if notification_unread_count %} ({{ notification_unread_count }}){% endif %}</a>
-          <a href="{{ url_for('certificates.home') }}">My certificates</a>
-        {% else %}
-          <p class="sidebar-placeholder">Sign in to use your SkillMatch workspace.</p>
-          <a href="{{ url_for('events.discover') }}">Discover events</a>
-          <a href="{{ url_for('certificates.verify') }}">Verify a certificate</a>
-        {% endif %}
-      </aside>
-
       <div class="main-column">
         <main id="main-content" class="page-content" tabindex="-1">
           {% block content %}{% endblock %}

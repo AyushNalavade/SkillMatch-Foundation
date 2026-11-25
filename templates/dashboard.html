@@ -1,5 +1,5 @@
 {% if not partial %}{% extends "base.html" %}{% endif %}
-{% from "macros.html" import empty_state, modal, modal_panel, toast %}
+{% from "macros.html" import empty_state, modal, modal_panel, toast, event_image %}
 {% from "event_card_data.html" import event_date_block %}
 
 {% block title %}{% if not partial %}Organizer dashboard · SkillMatch{% endif %}{% endblock %}
@@ -12,7 +12,61 @@
 {% endblock %}
 
 {% block content %}
-  {% if partial == "applicants" %}
+  {% if partial == "bulk-confirm" %}
+    {% call modal_panel("Confirm batch acceptance") %}
+      <p>
+        You’re about to accept {{ selected_applicants|length }} pending
+        applicant(s). They will each receive an acceptance notification.
+      </p>
+      <ul class="dashboard-batch-preview">
+        {% for applicant in selected_applicants %}
+          <li>
+            <strong>{{ applicant.name }}</strong>
+            <span>
+              Assigned role: {{ applicant.assigned_role or "Not assigned" }}
+            </span>
+            {% if applicant.fit_percent is not none %}
+              <span>
+                Skill fit: {{ applicant.fit_met_count }} of
+                {{ applicant.fit_total_count }} requirements met
+                ({{ applicant.fit_percent }}%)
+              </span>
+            {% else %}
+              <span>No published skill requirements to compare.</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+      <form method="post"
+            action="{{ url_for('dashboard.bulk_accept', event_id=event_id) }}"
+            hx-post="{{ url_for('dashboard.bulk_accept', event_id=event_id) }}"
+            hx-target="#modal-root"
+            hx-swap="innerHTML"
+            hx-disabled-elt="find button">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="department" value="{{ department }}">
+        <input type="hidden" name="confirm" value="yes">
+        {% for applicant in selected_applicants %}
+          <input type="hidden" name="volunteer_id" value="{{ applicant.username }}">
+          <input type="hidden"
+                 name="role_{{ applicant.username }}"
+                 value="{{ applicant.assigned_role }}">
+        {% endfor %}
+        <div class="dashboard-batch-actions">
+          <button class="button button--primary" type="submit">
+            Confirm and accept {{ selected_applicants|length }}
+          </button>
+          <button class="button button--secondary"
+                  type="button"
+                  hx-get="{{ url_for('dashboard.applicants', event_id=event_id, department=department) }}"
+                  hx-target="#modal-root"
+                  hx-swap="innerHTML">
+            Go back
+          </button>
+        </div>
+      </form>
+    {% endcall %}
+  {% elif partial == "applicants" %}
     {% call modal_panel(event.name ~ " · applicants") %}
       {% if error %}{{ toast(error, "error") }}{% endif %}
       {% if notice %}{{ toast(notice) }}{% endif %}
@@ -21,13 +75,97 @@
         <strong>Volunteer slots:</strong>
         {{ event.slots_needed - slots_remaining }} of {{ event.slots_needed }} filled
       </p>
+      <p class="dashboard-fit-note">
+        Review guidance: pending applicants are ordered by the share of published
+        skill requirements they meet. Event roles are assigned by you and do not
+        affect the score. This is a recommendation only; you make each final
+        decision.
+      </p>
+
+      {% if department_options %}
+        <form class="dashboard-applicant-filter"
+              method="get"
+              action="{{ url_for('dashboard.applicants', event_id=event_id) }}"
+              hx-get="{{ url_for('dashboard.applicants', event_id=event_id) }}"
+              hx-trigger="change, submit"
+              hx-target="#modal-root"
+              hx-swap="innerHTML">
+          <label for="applicant-department-filter">Filter by department</label>
+          <select id="applicant-department-filter" name="department">
+            <option value=""{{ ' selected' if not selected_department }}>
+              All departments
+            </option>
+            {% for department in department_options %}
+              <option value="{{ department }}"{{ ' selected' if selected_department == department }}>
+                {{ department }}
+              </option>
+            {% endfor %}
+          </select>
+          <button class="button button--secondary" type="submit">Apply filter</button>
+        </form>
+      {% endif %}
 
       {% if applicants %}
-        <ul class="team-grid" role="list">
+        {% set pending_applicants = applicants|selectattr("status", "equalto", "pending")|list %}
+        {% if pending_applicants and slots_remaining > 0 %}
+          <form id="bulk-accept-form"
+                class="dashboard-bulk-accept"
+                method="post"
+                action="{{ url_for('dashboard.bulk_accept', event_id=event_id) }}"
+                hx-post="{{ url_for('dashboard.bulk_accept', event_id=event_id) }}"
+                hx-target="#modal-root"
+                hx-swap="innerHTML"
+                hx-disabled-elt="find button">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="department" value="{{ selected_department }}">
+            <p>
+              Select pending applicants individually, or include all
+              {{ pending_applicants|length }} shown below. Roles are optional;
+              add them where the event needs specific responsibilities.
+            </p>
+            <label class="dashboard-batch-select dashboard-select-all">
+              <input type="checkbox" name="select_all_volunteers" value="1">
+              Select all {{ pending_applicants|length }} pending volunteers shown
+            </label>
+            <button class="button button--primary" type="submit">
+              Review selected applicants
+            </button>
+          </form>
+        {% endif %}
+        <ul class="team-grid dashboard-applicants-grid" role="list">
           {% for applicant in applicants %}
             <li class="team-card">
               <p class="eyebrow">{{ applicant.status }} · {{ applicant.username }}</p>
               <h3>{{ applicant.name }}</h3>
+              <p class="dashboard-applicant-fit">
+                <strong>Skill fit:</strong>
+                {% if applicant.fit_percent is not none %}
+                  {{ applicant.fit_met_count }} of {{ applicant.fit_total_count }}
+                  requirements met ({{ applicant.fit_percent }}%)
+                {% else %}
+                  No published skill requirements to compare
+                {% endif %}
+              </p>
+              {% if applicant.status == "pending" and slots_remaining > 0 %}
+                <label class="dashboard-batch-select">
+                  <input type="checkbox"
+                         name="volunteer_id"
+                         value="{{ applicant.username }}"
+                         form="bulk-accept-form">
+                  Select for batch review
+                </label>
+                <p class="dashboard-batch-role">
+                  <label for="batch-role-{{ loop.index }}">
+                    Assigned role if needed (optional)
+                  </label>
+                  <input id="batch-role-{{ loop.index }}"
+                         name="role_{{ applicant.username }}"
+                         type="text"
+                         form="bulk-accept-form"
+                         maxlength="80"
+                         placeholder="e.g. Registration lead, or leave blank">
+                </p>
+              {% endif %}
               {% if applicant.department %}
                 <p><strong>Department:</strong> {{ applicant.department }}</p>
               {% endif %}
@@ -71,6 +209,7 @@
                         hx-swap="innerHTML"
                         hx-disabled-elt="find button">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="department" value="{{ selected_department }}">
                     <button class="button button--primary" type="submit">Mark present</button>
                   </form>
                 {% elif event_date %}
@@ -88,6 +227,7 @@
                       hx-swap="innerHTML"
                       hx-disabled-elt="find button">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="department" value="{{ selected_department }}">
                   <input type="hidden" name="status" value="accepted">
                   <p>
                     <label for="role-{{ loop.index }}">Assigned role</label><br>
@@ -110,6 +250,7 @@
                       hx-swap="innerHTML"
                       hx-disabled-elt="find button">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="department" value="{{ selected_department }}">
                   <input type="hidden" name="status" value="rejected">
                   <button class="button button--secondary" type="submit">Reject applicant</button>
                 </form>
@@ -118,7 +259,11 @@
           {% endfor %}
         </ul>
       {% else %}
-        {{ empty_state("No applicants yet.", "Back to dashboard", url_for("dashboard.home")) }}
+        {{ empty_state(
+          "No applicants in this department." if selected_department else "No applicants yet.",
+          "Back to dashboard",
+          url_for("dashboard.home")
+        ) }}
       {% endif %}
     {% endcall %}
   {% else %}
@@ -127,7 +272,10 @@
         <p class="eyebrow">Organizer workspace</p>
         <h1 id="dashboard-title">Your events</h1>
         <p>Review applications, assign volunteer roles, and record attendance on event day.</p>
-        <p><a class="button button--primary" href="{{ url_for('dashboard.new_event') }}">Create event</a></p>
+        <div class="dashboard-top-actions">
+          <a class="button button--primary" href="{{ url_for('dashboard.new_event') }}">Create event</a>
+          <a class="button button--secondary" href="{{ url_for('dashboard.campus_impact') }}">Campus impact</a>
+        </div>
       </header>
 
       {% if error %}{{ toast(error, "error") }}{% endif %}
@@ -140,6 +288,7 @@
           {% for card in dashboard_cards %}
             <article class="team-card dashboard-event-card"
                      aria-labelledby="event-title-{{ loop.index }}">
+              {{ event_image(card.event) }}
               <div class="dashboard-event-card__layout">
                 {{ event_date_block(card) }}
                 <div class="dashboard-event-card__body">
@@ -153,25 +302,41 @@
                     </span>
                   </div>
                   <p>{{ card.event.description }}</p>
-                  <p class="dashboard-event-card__seats">
-                    <strong>Seats filled:</strong>
-                    {{ card.seats_filled }} of {{ card.total_seats }}
-                  </p>
-                  <div class="dashboard-applicant-counts" aria-label="Applicant counts">
-                    {% for count in card.applicant_counts %}
-                      <span class="dashboard-applicant-count">
-                        {{ count.label }} <strong>{{ count.count }}</strong>
-                      </span>
-                    {% endfor %}
-                  </div>
+                   {% if card.is_imported_roster %}
+                     <div class="dashboard-roster-counts" aria-label="Participant and account totals">
+                       <p><strong>{{ card.participant_count }}</strong><span>Total participants</span></p>
+                       <p><strong>{{ card.linked_account_count }}</strong><span>Linked SkillMatch accounts</span></p>
+                     </div>
+                   {% else %}
+                     <p class="dashboard-event-card__seats">
+                       <strong>Seats filled:</strong>
+                       {{ card.seats_filled }} of {{ card.total_seats }}
+                     </p>
+                     <div class="dashboard-applicant-counts" aria-label="Applicant counts">
+                       {% for count in card.applicant_counts %}
+                         <span class="dashboard-applicant-count">
+                           {{ count.label }} <strong>{{ count.count }}</strong>
+                         </span>
+                       {% endfor %}
+                     </div>
+                   {% endif %}
                   <div class="dashboard-event-card__actions">
-                    <a class="button button--secondary"
-                       href="{{ url_for('dashboard.edit_event', event_id=card.event_id) }}">Edit event</a>
-                    <a class="button button--secondary"
-                       href="{{ url_for('dashboard.contributions', event_id=card.event_id) }}">View Contributions</a>
-                    {% call modal("Review applicants") %}
-                      {{ url_for("dashboard.applicants", event_id=card.event_id) }}
-                    {% endcall %}
+                     {% if card.is_imported_roster %}
+                       <a class="button button--secondary"
+                          href="{{ url_for('prismlabs.admin_dashboard', event_id=card.event_id) }}">Manage event</a>
+                       <a class="button button--primary"
+                          href="{{ url_for('prismlabs.admin_volunteers', event_id=card.event_id) }}">Review participants</a>
+                    {% else %}
+                       <a class="button button--secondary"
+                          href="{{ url_for('dashboard.edit_event', event_id=card.event_id) }}">Edit event</a>
+                       <a class="button button--secondary"
+                          href="{{ url_for('dashboard.contributions', event_id=card.event_id) }}">View Contributions</a>
+                       <a class="button button--secondary"
+                          href="{{ url_for('dashboard.confirm_delete_event', event_id=card.event_id) }}">Delete event</a>
+                       {% call modal("Review applicants") %}
+                         {{ url_for("dashboard.applicants", event_id=card.event_id) }}
+                       {% endcall %}
+                    {% endif %}
                   </div>
                 </div>
               </div>

@@ -1,0 +1,21 @@
+<div class="event-option-list" role="group" aria-label="Departments invited">
+  {% if not department_option_groups %}
+    <p class="event-option-empty">No matching departments.</p>
+  {% endif %}
+  {% for group in department_option_groups %}
+    <fieldset class="event-option-group">
+      <legend>{{ group.label }}</legend>
+      <div class="event-option-grid">
+        {% for option in group.options %}
+          <label class="event-option">
+            <input type="checkbox"
+                   name="departments"
+                   value="{{ option.name }}"
+                   {% if option.selected or option.name in selected_departments %}checked{% endif %}>
+            <span>{{ option.name }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+  {% endfor %}
+</div>

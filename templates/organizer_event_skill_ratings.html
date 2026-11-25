@@ -1,0 +1,21 @@
+{% if skill_rating_rows %}
+  <div class="event-skill-rating-list">
+    {% for row in skill_rating_rows %}
+      <fieldset class="event-skill-rating">
+        <legend>{{ row.name }}</legend>
+        <label for="skill-rating-{{ loop.index }}">Minimum rating</label>
+        <input id="skill-rating-{{ loop.index }}"
+               type="number"
+               name="required_skill_rating"
+               min="0"
+               step="1"
+               inputmode="numeric"
+               value="{{ row.rating }}"
+               required>
+        <input type="hidden" name="required_skill_name" value="{{ row.name }}">
+      </fieldset>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="profile-skill-help">Select required skills above, then update them to set minimum ratings.</p>
+{% endif %}

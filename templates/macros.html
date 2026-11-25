@@ -9,6 +9,18 @@
   </div>
 {%- endmacro %}
 
+{% macro event_image(event) -%}
+  {% set visual = event_visual(event) %}
+  {% if visual.image_url %}
+    <figure class="event-visual event-visual--{{ visual.slug }}">
+      <img src="{{ visual.image_url }}"
+           alt="{{ visual.alt }}"
+           width="960" height="540" loading="lazy" decoding="async"
+           referrerpolicy="no-referrer">
+    </figure>
+  {% endif %}
+{%- endmacro %}
+
 {% macro empty_state(message, cta_text, cta_link) -%}
   <section class="empty-state" aria-label="No items">
     <span class="empty-state-mark" aria-hidden="true">—</span>
