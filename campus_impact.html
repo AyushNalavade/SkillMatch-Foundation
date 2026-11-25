@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% from "macros.html" import empty_state %}
+
+{% block title %}Campus impact · SkillMatch{% endblock %}
+
+{% block content %}
+  <section class="campus-impact-page" aria-labelledby="campus-impact-title">
+    <header class="page-heading">
+      <p class="eyebrow">Organizer workspace</p>
+      <h1 id="campus-impact-title">Campus impact</h1>
+      <p>
+        A privacy-safe summary of volunteer contributions across completed
+        SkillMatch events. No individual volunteer histories are shown.
+      </p>
+    </header>
+
+    <form class="campus-impact-range" method="get" action="{{ url_for('dashboard.campus_impact') }}">
+      <label for="impact-range">Time range</label>
+      <select id="impact-range" name="range">
+        <option value="30d" {{ "selected" if summary.range_key == "30d" }}>Last 30 days</option>
+        <option value="90d" {{ "selected" if summary.range_key == "90d" }}>Last 90 days</option>
+        <option value="365d" {{ "selected" if summary.range_key == "365d" }}>Last 12 months</option>
+        <option value="all" {{ "selected" if summary.range_key == "all" }}>All time</option>
+      </select>
+      <button class="button button--secondary" type="submit">Update range</button>
+    </form>
+    <p class="campus-impact-period">
+      {% if summary.period_start %}
+        Showing completed events from {{ summary.period_start }} through {{ summary.period_end }}.
+      {% else %}
+        Showing all completed events, including records without a date.
+      {% endif %}
+    </p>
+
+    {% if summary.privacy_suppressed %}
+      {{ empty_state(
+        "Campus totals are hidden until at least five distinct volunteers have recorded participation in this time range. This protects small groups.",
+        "Back to organizer dashboard",
+        url_for("dashboard.home")
+      ) }}
+    {% elif not summary.has_participation_data %}
+      {{ empty_state(
+        "No completed event contributions with organizer-recorded attendance or positive hours are available for this time range.",
+        "Back to organizer dashboard",
+        url_for("dashboard.home")
+      ) }}
+      {% if summary.data_notes %}
+        <aside class="campus-impact-data-notes" aria-label="Data completeness notes">
+          <h2>Data notes</h2>
+          <ul>
+            {% for note in summary.data_notes %}
+              <li>{{ note }}</li>
+            {% endfor %}
+          </ul>
+        </aside>
+      {% endif %}
+    {% else %}
+      <div class="campus-impact-kpis" aria-label="Campus impact summary">
+        <article class="campus-impact-kpi">
+          <p class="eyebrow">Recorded hours</p>
+          <strong>{{ summary.totals.recorded_hours|format_decimal }}</strong>
+          <span>Organizer-entered hours from confirmed participation</span>
+        </article>
+        <article class="campus-impact-kpi">
+          <p class="eyebrow">Event participations</p>
+          <strong>{{ summary.totals.event_participations }}</strong>
+          <span>Confirmed volunteer and event records</span>
+        </article>
+        <article class="campus-impact-kpi">
+          <p class="eyebrow">Volunteers</p>
+          <strong>{{ summary.totals.distinct_volunteers }}</strong>
+          <span>Distinct volunteers with confirmed participation</span>
+        </article>
+        <article class="campus-impact-kpi">
+          <p class="eyebrow">Completed events</p>
+          <strong>{{ summary.totals.completed_events }}</strong>
+          <span>Completed events in this range</span>
+        </article>
+        <article class="campus-impact-kpi">
+          <p class="eyebrow">Departments represented</p>
+          <strong>
+            {{ summary.totals.departments_represented
+               if summary.totals.departments_represented is not none
+               else "Incomplete" }}
+          </strong>
+          <span>Based on volunteer profile departments</span>
+        </article>
+        <article class="campus-impact-kpi">
+          <p class="eyebrow">Skills practiced</p>
+          <strong>
+            {{ summary.totals.skills_practiced
+               if summary.totals.skills_practiced is not none
+               else "Incomplete" }}
+          </strong>
+          <span>Required skills on events with confirmed participation</span>
+        </article>
+      </div>
+
+      <p class="campus-impact-evidence">
+        Participation is counted when an accepted volunteer has organizer-recorded
+        attendance or positive recorded hours. Skills are drawn from the completed
+        event’s published requirements; they are not an independent skill assessment.
+        Category breakdowns are shown only when every group includes at least five
+        distinct volunteers.
+      </p>
+
+      {% if summary.data_notes %}
+        <aside class="campus-impact-data-notes" aria-label="Data completeness notes">
+          <h2>Data notes</h2>
+          <ul>
+            {% for note in summary.data_notes %}
+              <li>{{ note }}</li>
+            {% endfor %}
+          </ul>
+        </aside>
+      {% endif %}
+
+      <div class="campus-impact-charts">
+        <section class="campus-impact-chart" aria-labelledby="impact-departments-title">
+          <h2 id="impact-departments-title">Departments represented</h2>
+          {% if summary.department_breakdown_available %}
+            <img src="{{ url_for('dashboard.campus_impact_departments_chart', range=summary.range_key) }}"
+                 alt="Aggregate horizontal bar chart of volunteer counts by department. Each displayed group contains at least five distinct volunteers.">
+          {% else %}
+            {{ empty_state(
+              "The department breakdown is unavailable because the data is incomplete or a group is below the privacy threshold.",
+              "Back to organizer dashboard",
+              url_for("dashboard.home")
+            ) }}
+          {% endif %}
+        </section>
+
+        <section class="campus-impact-chart" aria-labelledby="impact-skills-title">
+          <h2 id="impact-skills-title">Skills practiced</h2>
+          {% if summary.skill_breakdown_available %}
+            <img src="{{ url_for('dashboard.campus_impact_skills_chart', range=summary.range_key) }}"
+                 alt="Aggregate horizontal bar chart of event-required skills practiced by distinct volunteers. Each displayed group contains at least five distinct volunteers.">
+          {% else %}
+            {{ empty_state(
+              "The skills breakdown is unavailable because the data is incomplete or a group is below the privacy threshold.",
+              "Back to organizer dashboard",
+              url_for("dashboard.home")
+            ) }}
+          {% endif %}
+        </section>
+      </div>
+    {% endif %}
+
+    <p class="campus-impact-back">
+      <a class="button button--secondary" href="{{ url_for('dashboard.home') }}">Back to organizer dashboard</a>
+    </p>
+  </section>
+{% endblock %}
