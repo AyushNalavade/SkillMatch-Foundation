@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Certificate verification · SkillMatch{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='prismlabs.css') }}">{% endblock %}
+{% block content %}
+<section class="team-card prism-form-card">
+  {% if result %}
+    <p class="eyebrow">Valid certificate</p>
+    <h1>Certificate verified</h1>
+    <p><strong>Name:</strong> {{ result.name }}</p>
+    <p><strong>Event:</strong> {{ result.event }}</p>
+    {% if result.date %}<p><strong>Date:</strong> {{ result.date }}</p>{% endif %}
+    <p class="prism-valid">Valid</p>
+  {% else %}
+    <p class="eyebrow">Certificate check</p>
+    <h1>Certificate not found</h1>
+    <p>No valid PrismLabs certificate matches this link.</p>
+  {% endif %}
+</section>
+{% endblock %}
