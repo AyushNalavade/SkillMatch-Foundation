@@ -9,15 +9,21 @@ import re
 import secrets
 import string
 from typing import Any
+from xml.etree import ElementTree
 
 from data_store import load, save
 from formatting import format_decimal
 from notification_service import add_notifications
+from certificate_themes import CERTIFICATE_THEMES, get_certificate_theme
+from event_presentation import event_category
 from reportlab.lib.colors import Color, HexColor
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
+from reportlab.graphics import renderPDF
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics.svgpath import SvgPath
 
 
 EVENTS_FILE = "events.json"
@@ -256,19 +262,39 @@ def _event_display_name(value: Any) -> str:
     return normalized.title() if normalized.islower() else normalized
 
 
+def _draw_theme_emblem(pdf: Canvas, theme: Mapping[str, Any]) -> None:
+    """Render our trusted inline SVG paths as vectors, with no files or extra dependencies."""
+    root = ElementTree.fromstring(theme["emblem_svg"])
+    drawing = Drawing(24, 24)
+    for element in root.iter():
+        if element.tag.rsplit("}", 1)[-1] != "path":
+            continue
+        drawing.add(SvgPath(
+            element.attrib["d"],
+            fillColor=None,
+            strokeColor=HexColor(theme["primary"]),
+            strokeWidth=1.4,
+        ))
+    renderPDF.draw(drawing, pdf, 418, 544)
+
+
 def _render_certificate_pdf(
     volunteer_name: str,
     event_name: str,
-    hours: int | float,
+    hours: int | float | None,
     event_date: str | None = None,
     issue_date: str | None = None,
     volunteer_role: str | None = None,
     organizer_name: str | None = None,
+    theme_category: str | None = None,
+    omit_missing_event_date: bool = False,
+    issue_date_label: str = "Issue date",
 ) -> bytes:
     """Render a single-page landscape certificate with a split photo-and-type layout."""
     _register_certificate_fonts()
-    navy = HexColor("#17243b")
-    accent = HexColor("#D4B483")
+    theme = get_certificate_theme(theme_category)
+    navy = HexColor(theme["primary"])
+    accent = HexColor(theme["accent"])
     paper = Color(0.976, 0.965, 0.929)
     muted_ink = HexColor("#48566b")
     dome_jpeg, dome_width, dome_height = _read_dome_image()
@@ -293,7 +319,12 @@ def _render_certificate_pdf(
     pdf.setStrokeColor(accent)
     pdf.setLineWidth(0.9)
     pdf.rect(18, 18, 756, 576, stroke=1, fill=0)
+    if theme["border_pattern"] == "dashed":
+        pdf.setDash(4, 3)
+    elif theme["border_pattern"] == "dotted":
+        pdf.setDash(1, 3)
     pdf.rect(25, 25, 742, 562, stroke=1, fill=0)
+    pdf.setDash()
     photo_clip = pdf.beginPath()
     photo_clip.moveTo(27, 27)
     photo_clip.lineTo(27, 585)
@@ -367,6 +398,7 @@ def _render_certificate_pdf(
         leaf.curveTo(*c3, *c4, *finish)
         pdf.drawPath(leaf, stroke=1, fill=0)
 
+    _draw_theme_emblem(pdf, theme)
     _draw_certificate_text(
         pdf, "MIT WORLD PEACE UNIVERSITY", 581, 566, 10, "DM-Sans-Bold", navy,
     )
@@ -374,8 +406,11 @@ def _render_certificate_pdf(
     _draw_certificate_text(
         pdf, "CERTIFICATE OF", 581, 501, 20, "Fraunces-SemiBold", navy,
     )
+    heading_lines, heading_size = _fit_pdf_text(
+        theme["heading"], 346, 29, 13, 1, bold=True, font_name="Fraunces-Bold",
+    )
     _draw_certificate_text(
-        pdf, "PARTICIPATION", 581, 472, 29, "Fraunces-Bold", navy,
+        pdf, heading_lines[0], 581, 472, heading_size, "Fraunces-Bold", navy,
     )
     _draw_certificate_text(
         pdf, "PRESENTED TO", 581, 438, 8, "DM-Sans-Bold", navy,
@@ -445,20 +480,18 @@ def _render_certificate_pdf(
             role_y -= role_size + 2
         details_y = role_y - 10
 
-    event_date_text = _format_certificate_date(event_date) or "Not recorded"
+    event_date_text = _format_certificate_date(event_date)
     issue_date_text = _format_certificate_date(issue_date) or "Not recorded"
+    if event_date_text or not omit_missing_event_date:
+        _draw_certificate_text(
+            pdf, f"Event date: {event_date_text or 'Not recorded'}",
+            text_center, details_y, 9, "DM-Sans", muted_ink,
+        )
+    else:
+        details_y += 16
     _draw_certificate_text(
         pdf,
-        f"Event date: {event_date_text}",
-        text_center,
-        details_y,
-        9,
-        "DM-Sans",
-        muted_ink,
-    )
-    _draw_certificate_text(
-        pdf,
-        f"Issue date: {issue_date_text}",
+        f"{issue_date_label}: {issue_date_text}",
         text_center,
         details_y - 16,
         9,
@@ -467,12 +500,19 @@ def _render_certificate_pdf(
     )
     _draw_certificate_text(
         pdf,
-        f"{format_decimal(hours)} volunteer hours",
+        "Hours: N/A" if hours is None else f"{format_decimal(hours)} volunteer hours",
         text_center,
         details_y - 45,
         14,
         "DM-Sans-Bold",
         navy,
+    )
+    citation_lines, citation_size = _fit_pdf_text(
+        theme["citation"], 346, 8, 7, 1, font_name="DM-Sans",
+    )
+    _draw_certificate_text(
+        pdf, citation_lines[0], text_center, details_y - 62,
+        citation_size, "DM-Sans", navy,
     )
     _draw_certificate_text(
         pdf,
@@ -614,6 +654,7 @@ def render_certificate_pdf(record: Mapping[str, Any]) -> bytes | None:
         issue_date=record.get("generated_at"),
         volunteer_role=volunteer_role,
         organizer_name=organizer_name,
+        theme_category=record.get("theme_category"),
     )
 
 
@@ -704,6 +745,8 @@ def generate_certificate(
                 "hours": application.get("hours", 0),
                 "notes": application.get("notes", ""),
                 "generated_at": datetime.now(timezone.utc).isoformat(),
+                "category": event_category(event),
+                "theme_category": event_category(event),
             }
 
         code = record.get("verification_code")
@@ -887,6 +930,195 @@ def get_user_certificates(username: str) -> list[dict[str, Any]]:
     )
 
 
+def get_skill_passport(username: str) -> dict[str, Any]:
+    """Build a private skill portfolio from completed, organizer-confirmed work.
+
+    A verified skill must have been required by a completed event whose accepted
+    application has an organizer-assigned role and confirmed attendance or
+    positive recorded hours. Self-reported skills alone never create a claim.
+    """
+    if not isinstance(username, str) or not username.strip():
+        raise ValueError("Enter a valid volunteer username.")
+    username = username.strip()
+
+    users = _load_object(USERS_FILE, "keyed by username")
+    user = users.get(username)
+    if not isinstance(user, Mapping) or user.get("role") != "Student Volunteer":
+        return {
+            "completed_event_count": 0,
+            "total_hours": 0.0,
+            "contributions": [],
+            "verified_skills": [],
+        }
+
+    events = _load_object(EVENTS_FILE, "keyed by event ID")
+    applications = _load_object(APPLICATIONS_FILE, "keyed by event ID")
+    certificates = _load_object(CERTIFICATES_FILE, "keyed by verification code")
+    certificates_by_event: dict[str, str] = {}
+    for record in certificates.values():
+        if (
+            isinstance(record, Mapping)
+            and record.get("username") == username
+            and isinstance(record.get("event_id"), str)
+        ):
+            code = _normalize_verification_code(record.get("verification_code"))
+            if code:
+                certificates_by_event.setdefault(record["event_id"], code)
+
+    contributions: list[dict[str, Any]] = []
+    skills_by_name: dict[str, dict[str, Any]] = {}
+    total_hours = 0.0
+
+    for event_id, event in events.items():
+        if (
+            not isinstance(event_id, str)
+            or not isinstance(event, Mapping)
+            or event.get("status") != "completed"
+        ):
+            continue
+
+        event_applications = applications.get(event_id, {})
+        if not isinstance(event_applications, Mapping):
+            continue
+        application = event_applications.get(username)
+        if (
+            not isinstance(application, Mapping)
+            or not isinstance(application.get("status"), str)
+            or application["status"].casefold() != "accepted"
+        ):
+            continue
+
+        role = application.get("role")
+        if not isinstance(role, str) or not role.strip():
+            continue
+        hours = application.get("hours", 0)
+        if (
+            not isinstance(hours, (int, float))
+            or isinstance(hours, bool)
+            or not math.isfinite(hours)
+            or hours < 0
+        ):
+            hours = 0
+        if application.get("attended") is not True and hours <= 0:
+            continue
+
+        required_skills = event.get("required_skills", {})
+        event_skills = []
+        if isinstance(required_skills, Mapping):
+            seen_skills: set[str] = set()
+            for skill in required_skills:
+                if not isinstance(skill, str) or not skill.strip():
+                    continue
+                normalized_skill = " ".join(skill.split()).casefold()
+                if normalized_skill in seen_skills:
+                    continue
+                seen_skills.add(normalized_skill)
+                event_skills.append(" ".join(skill.split()))
+
+        if float(hours).is_integer():
+            hours = int(hours)
+        certificate_code = certificates_by_event.get(event_id)
+        contribution = {
+            "event_id": event_id,
+            "event_name": (
+                event.get("name")
+                if isinstance(event.get("name"), str) and event.get("name").strip()
+                else event_id
+            ),
+            "event_date": _event_date_value(event),
+            "role": role.strip(),
+            "hours": hours,
+            "skills": event_skills,
+            "certificate_code": certificate_code,
+            "event_linkable": not bool(event.get("deleted_at")),
+            "sort_date": str(
+                event.get("completed_at") or event.get("date") or ""
+            ),
+        }
+        contributions.append(contribution)
+        total_hours += float(hours)
+
+        for skill in event_skills:
+            normalized_skill = " ".join(skill.split()).casefold()
+            skill_entry = skills_by_name.setdefault(
+                normalized_skill, {"name": skill, "evidence": []}
+            )
+            skill_entry["evidence"].append(contribution)
+
+    contributions.sort(
+        key=lambda item: (item["sort_date"], item["event_name"].casefold()),
+        reverse=True,
+    )
+    verified_skills = sorted(
+        skills_by_name.values(), key=lambda item: item["name"].casefold()
+    )
+    for skill in verified_skills:
+        skill["evidence"].sort(
+            key=lambda item: (item["sort_date"], item["event_name"].casefold()),
+            reverse=True,
+        )
+
+    if total_hours.is_integer():
+        total_hours = int(total_hours)
+    return {
+        "completed_event_count": len(contributions),
+        "total_hours": total_hours,
+        "contributions": contributions,
+        "verified_skills": verified_skills,
+    }
+
+
+def get_volunteer_badge(username: str) -> dict[str, Any] | None:
+    """Return the volunteer's current hours tier, based on completed-event records."""
+    if not isinstance(username, str) or not username.strip():
+        return None
+
+    events = _load_object(EVENTS_FILE, "keyed by event ID")
+    applications = _load_object(APPLICATIONS_FILE, "keyed by event ID")
+    total_hours = 0.0
+    for event_id, event in events.items():
+        if not isinstance(event, Mapping) or event.get("status") != "completed":
+            continue
+        event_applications = applications.get(event_id, {})
+        if not isinstance(event_applications, Mapping):
+            raise ValueError(f"Applications for event '{event_id}' must be an object.")
+        application = event_applications.get(username)
+        if (
+            not isinstance(application, Mapping)
+            or not isinstance(application.get("status"), str)
+            or application["status"].casefold() != "accepted"
+        ):
+            continue
+        hours = application.get("hours")
+        if (
+            isinstance(hours, (int, float))
+            and not isinstance(hours, bool)
+            and math.isfinite(hours)
+            and hours > 0
+        ):
+            total_hours += float(hours)
+
+    if total_hours <= 0:
+        return None
+    if total_hours >= 100:
+        badge, next_badge, next_threshold = "Diamond", None, None
+    elif total_hours >= 25:
+        badge, next_badge, next_threshold = "Gold", "Diamond", 100
+    elif total_hours >= 10:
+        badge, next_badge, next_threshold = "Silver", "Gold", 25
+    else:
+        badge, next_badge, next_threshold = "Copper", "Silver", 10
+    return {
+        "name": badge,
+        "slug": badge.lower(),
+        "total_hours": total_hours,
+        "next_badge": next_badge,
+        "hours_until_next": (
+            next_threshold - total_hours if next_threshold is not None else None
+        ),
+    }
+
+
 def get_certificate_for_user(
     verification_code: str, username: str
 ) -> dict[str, Any] | None:
@@ -902,6 +1134,18 @@ def get_certificate_for_user(
     ):
         return None
     return dict(record)
+
+
+def render_verified_certificate_pdf(verification_code: str) -> bytes | None:
+    """Render public certificate content only for an existing, exact verification code."""
+    code = _normalize_verification_code(verification_code)
+    if code is None:
+        return None
+    certificates = _load_object(CERTIFICATES_FILE, "keyed by verification code")
+    record = certificates.get(code)
+    if not isinstance(record, Mapping) or record.get("verification_code") != code:
+        return None
+    return render_certificate_pdf(record)
 
 
 def verify_certificate(verification_code: str) -> dict[str, Any] | None:
@@ -948,4 +1192,5 @@ def verify_certificate(verification_code: str) -> dict[str, Any] | None:
         "issue_date": _format_certificate_date(record.get("generated_at")),
         "hours": hours,
         "pdf_available": True,
+        "theme": get_certificate_theme(record.get("theme_category")),
     }
