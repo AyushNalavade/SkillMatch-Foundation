@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "macros.html" import toast, empty_state %}
+{% block title %}PrismLabs event participants · SkillMatch{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='prismlabs.css') }}">{% endblock %}
+{% block content %}
+<section class="page-heading prism-heading"><p class="eyebrow">Organizer-only roster</p><h1>Event participants</h1><p>Only the event organizer can view this roster. Volunteers see only their own records in their profiles. Participant records are not the same as linked SkillMatch accounts.</p></section>
+{% for category, message in get_flashed_messages(with_categories=true) %}{{ toast(message, category) }}{% endfor %}
+<section class="team-card">
+  <div class="prism-roster-summary" aria-label="Roster totals">
+    <p><strong>{{ total_participants }}</strong><span>Total participants</span></p>
+    <p><strong>{{ linked_accounts }}</strong><span>Linked SkillMatch accounts</span></p>
+  </div>
+  <form class="prism-filter-form" method="get" action="{{ url_for('prismlabs.admin_volunteers', event_id=event_id) }}">
+    <p><label for="roster-search">Search name, PRN, or email</label><input id="roster-search" name="q" value="{{ search }}"></p>
+    <p><label for="filter-year">Academic year</label><select id="filter-year" name="year"><option value="">All years</option>{% for value in years %}<option value="{{ value }}" {% if selected_year == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></p>
+    <p><label for="filter-department">Department</label><select id="filter-department" name="department"><option value="">All departments</option>{% for value in departments %}<option value="{{ value }}" {% if selected_department == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></p>
+    <p><label for="filter-area">Interested area</label><select id="filter-area" name="area"><option value="">All areas</option>{% for value in areas %}<option value="{{ value }}" {% if selected_area == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></p>
+    <button class="button button--primary" type="submit">Filter</button>
+    <a class="button button--secondary" href="{{ url_for('prismlabs.export_volunteers', event_id=event_id, q=search, year=selected_year, department=selected_department, area=selected_area) }}">Export filtered CSV</a>
+  </form>
+  {% if volunteers %}
+    <p class="prism-filter-count">Showing {{ volunteers|length }} participant records</p>
+    <div class="prism-table-wrap"><table class="prism-table">
+      <thead><tr><th scope="col">Participant</th><th scope="col">Email</th><th scope="col">Year / department</th><th scope="col">Interested areas</th><th scope="col">Registered</th><th scope="col">Hours</th><th scope="col">Review flags</th><th scope="col">Certificate</th><th scope="col">SkillMatch account</th></tr></thead>
+      <tbody>{% for volunteer in volunteers %}
+        <tr>
+          <td data-label="Participant"><strong>{{ volunteer.full_name }}</strong><span class="prism-secondary-value">PRN {{ volunteer.prn }}</span></td>
+          <td data-label="Email"><a href="mailto:{{ volunteer.email }}">{{ volunteer.email }}</a></td>
+          <td data-label="Year / department">{{ volunteer.academic_year }}<span class="prism-secondary-value">{{ volunteer.department }}</span></td>
+          <td data-label="Interested areas">{% for area in volunteer.interested_areas %}<span class="prism-tag">{{ area }}</span> {% else %}<span class="prism-secondary-value">No areas listed</span>{% endfor %}</td>
+          <td data-label="Registered">{{ volunteer.registered_at or "Not recorded" }}</td>
+          <td data-label="Hours"><form class="prism-hours-form" method="post" action="{{ url_for('prismlabs.update_volunteer_hours', event_id=event_id, prn=volunteer.prn) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label class="visually-hidden" for="hours-{{ loop.index }}">Hours for {{ volunteer.full_name }}</label>
+            <input id="hours-{{ loop.index }}" type="number" min="0.1" step="0.1" name="hours" value="{{ volunteer.hours if volunteer.hours is not none else '' }}" placeholder="N/A">
+            <button class="button button--secondary" type="submit">Save</button></form></td>
+          <td data-label="Review flags">{% for flag in volunteer.review_flags %}<span class="prism-review-flag">{{ flag }}</span>{% else %}<span class="prism-secondary-value">No flags</span>{% endfor %}</td>
+          <td data-label="Certificate">{% set certificate_id = certificate_by_prn.get(volunteer.prn) %}{% if certificate_id %}<span class="prism-action-links"><a href="{{ url_for('prismlabs.admin_certificate_pdf', event_id=event_id, certificate_id=certificate_id) }}">Preview</a><a href="{{ url_for('prismlabs.admin_certificate_pdf', event_id=event_id, certificate_id=certificate_id, download=1) }}">Download</a></span>{% else %}<span class="prism-secondary-value">Not available</span>{% endif %}</td>
+          <td data-label="SkillMatch account">{% if volunteer.skillmatch_username %}<span class="prism-account-state">Linked</span><span class="prism-secondary-value">{{ volunteer.skillmatch_username }}</span>{% else %}<span class="prism-secondary-value">No linked account</span>{% endif %}</td>
+        </tr>
+      {% endfor %}</tbody>
+    </table></div>
+  {% else %}{{ empty_state("No volunteers match these filters.", "Clear filters", url_for('prismlabs.admin_volunteers', event_id=event_id)) }}{% endif %}
+</section>
+<section class="team-card prism-form-card">
+  <h2>Create a SkillMatch volunteer account</h2><p>The volunteer will use the existing SkillMatch sign-in page. No email is sent. Passwords are not displayed in this roster.</p>
+  {% if all_volunteers %}
+    <form method="post" action="{{ url_for('prismlabs.add_volunteer_login', event_id=event_id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <p><label for="volunteer-prn">Participant</label><select id="volunteer-prn" name="prn" required>{% for volunteer in all_volunteers %}<option value="{{ volunteer.prn }}">{{ volunteer.full_name }} · {{ volunteer.prn }}{% if volunteer.skillmatch_username %} · linked{% endif %}</option>{% endfor %}</select></p>
+      <p><label for="volunteer-login-username">SkillMatch username</label><input id="volunteer-login-username" name="username" type="text" maxlength="64" autocomplete="username" required></p>
+      <p><label for="volunteer-temp-password">Temporary password</label><input id="volunteer-temp-password" name="password" type="password" minlength="8" autocomplete="new-password" required></p>
+      <button class="button button--primary" type="submit">Create SkillMatch account</button>
+    </form>
+  {% else %}
+    {{ empty_state("There are no participant records to link to accounts yet.", "View full roster", url_for('prismlabs.admin_volunteers', event_id=event_id)) }}
+  {% endif %}
+</section>
+{% endblock %}
